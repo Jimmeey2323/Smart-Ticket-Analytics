@@ -1,0 +1,229 @@
+Smart Ticket Management & Analytics System for Physique 57 India
+With Sophisticated Glassmorphic Design Language
+1. Design System & Visual Foundation
+Create cohesive color palette: Pure white (#FFFFFF) primary backgrounds with charcoal to black gradient accents (#1A1A1A to #0D0D0D)
+Define secondary accent colors: Deep slate (#2D3748), metallic silver (#E8E8E8) for borders and dividers
+Establish glassmorphic component library using backdrop blur, semi-transparent white overlays (rgba 85-90% opacity), and subtle shadows
+Create typography hierarchy: Refined sans-serif (Geist, Inter, or similar) with careful weight distribution (Regular 400, Medium 500, Semibold 600)
+Define spacing system using 4px base unit for consistent grid (4px, 8px, 12px, 16px, 24px, 32px, 48px, 64px)
+Implement elegant elevation system with layered glassmorphic effects and subtle depth through shadows
+Create micro-animation library for smooth transitions, hover states, and loading indicators
+Design icon system using Lucide React with consistent 24px size and refined stroke weights
+Build custom scrollbar styling with gradient accents and minimalist appearance
+Define focus states and accessibility indicators with dark gradient highlights
+2. Database Architecture & Schema Design
+Create users table with role-based access (Admin, Manager, Team Member, Support Staff)
+Create teams table to organize staff by department (Operations, Tech, Customer Service, Trainers, Maintenance, etc.)
+Create categories table for main feedback types with icon metadata
+Create subcategories table linked to categories with form configuration
+Create ticket_fields table storing dynamic form fields per subcategory with UI component types
+Create tickets table with comprehensive tracking fields and visual status indicators
+Create ticket_responses table for conversation threads with timestamps
+Create ticket_attachments table with file metadata and preview generation flags
+Create ticket_history table with audit trail for all changes
+Create auto_assignment_rules table for intelligent routing logic
+Create escalation_rules table with SLA definitions
+Create notifications table tracking all system communications
+Create ai_tags table for sentiment analysis and auto-categorization
+Create analytics_cache table for pre-computed metrics
+3. Authentication & User Management UI
+Design elegant login page with glassmorphic card centered on white background with dark gradient accent border
+Create minimalist email/password input fields with refined borders and focus states
+Build sophisticated onboarding flow with step indicators and dark gradient progress bars
+Design role-based dashboard access with seamless transitions
+Create user profile card with glassmorphic design showing team assignment and preferences
+Build team management interface with elegant data tables and modal dialogs
+Design notification preferences panel with toggle switches and gradient emphasis
+Create session management with subtle logout indicators
+4. Ticket Creation & Smart Form System UI
+Design multi-step form with elegant step indicators and dark gradient highlights
+Create category selector with visual icons and glassmorphic cards with hover effects
+Build searchable dropdown for category and subcategory selection
+Design dynamic form fields with subtle glassmorphic input components
+Create file upload area with drag-and-drop support and minimalist design
+Build rich text editor interface with sophisticated toolbar design
+Design location/studio selector with clean radio buttons or dropdown
+Create priority selector with visual indicators (colored dots with gradient accents)
+Design customer information section with efficient layout
+Create auto-save indicator with subtle animation and dark accent
+Build quick-template selector with glassmorphic cards
+Design form validation feedback with elegant error states
+5. Auto-Assignment & Intelligent Routing System
+Build rule configuration interface with clean, organized layout
+Design visual rule builder with drag-and-drop capabilities
+Create team member profile cards showing availability and skill sets
+Design workload distribution dashboard with gradient-accented charts
+Build assignment history timeline with elegant visual flow
+Create override interface for manual assignment with confirmation states
+Design availability status toggles with gradient indicators
+6. Notification & Reminder System UI
+Design notification center with glassmorphic card design
+Create notification badge with subtle animation and dark accent
+Build in-app notification cards with icon, title, description, and action buttons
+Design email notification templates with sophisticated styling
+Create notification preference panel with toggle switches
+Build reminder timeline showing upcoming deadlines with gradient accents
+Design escalation alerts with prominent dark gradient emphasis
+Create daily digest email with elegant summary layout
+Build notification history with clean list view
+7. Escalation Management & SLA Tracking UI
+Design SLA timeline visualization with gradient progress indicators
+Create escalation flow diagram with elegant node-based layout
+Build breach warning component with dark red gradient accent and animation
+Design escalation history timeline with professional formatting
+Create escalation confirmation modal with clear messaging
+Build hierarchy visualization showing escalation paths
+Design manual escalation interface with reason input and preview
+8. Centralized Dashboard & Views
+Main Dashboard Layout:
+
+Design header with logo, search bar, user profile dropdown, and notifications bell (all with glassmorphic elements)
+Create sidebar navigation with smooth transitions and dark gradient active state indicators
+Build main content area with white background and strategically placed dark gradient accents
+Status Overview Cards:
+
+Design four elegant glassmorphic cards showing Open, In Progress, Pending, Resolved counts
+Implement dark gradient accent borders on top of each card
+Add percentage change indicators with subtle animation
+Ticket Summary Section:
+
+Create priority-filtered quick view (High Priority, Due Soon, Unassigned)
+Design color-coded priority dots (Red, Orange, Yellow, Green) with professional appearance
+Build mini ticket cards with key info and quick action buttons
+Advanced Filtering Panel:
+
+Design clean filter sidebar with grouped filter options
+Create glassmorphic dropdown menus with smooth animations
+Build tag-based filters with gradient accent on active selections
+Design clear filters button with minimalist design
+Chart & Analytics Section:
+
+Build real-time ticket volume chart with gradient-filled area under line
+Create category distribution donut chart with dark gradient segments
+Design resolution time boxplot with elegant styling
+Build SLA compliance gauge with gradient color transition
+Different View Options:
+
+Design List View: Clean table with alternating row backgrounds, dark gradient highlights on hover
+Design Kanban View: Glassmorphic columns for each status with draggable cards
+Design Calendar View: Elegant calendar with deadline indicators and gradient accents
+Design Timeline View: Professional horizontal timeline with milestone indicators
+9. Ticket Management & Workflow UI
+Design ticket detail page with elegant header containing ticket ID, status badge, priority indicator
+Create tab-based interface (Overview, Messages, History, Attachments, Analytics)
+Build glassmorphic comment section with reply functionality
+Design status dropdown with smooth transition animations and dark gradient highlighting
+Create priority reassessment interface with explanation input
+Build ticket linking modal with search and clean selection interface
+Design bulk action toolbar with gradient accent and clear iconography
+Create ticket transfer modal with team selector and notes
+Build resolution template selector with preview
+Design timer interface with elegant start/stop controls
+Create internal notes vs customer-facing toggle with clear visual distinction
+10. AI-Powered Auto-Tagging & Intelligence UI
+Design auto-tag display with glassmorphic badges and gradient accents
+Create sentiment analysis visualization with color-coded indicators (green positive, gray neutral, red negative)
+Build keyword cloud with elegant sizing and dark gradient styling
+Design auto-categorization suggestion popup with confidence score
+Create duplicate detection alert with glassmorphic card and merge option
+Build trend detection dashboard with elegant chart visualizations
+Design anomaly alert with prominent dark gradient highlight
+Create AI suggestions panel with acceptance/rejection buttons
+11. Analytics & Reporting Engine UI
+Dashboard Design:
+
+Create comprehensive analytics page with white background and strategic dark gradient accents
+Design KPI cards at top (Total Tickets, Avg Resolution Time, SLA Compliance %, Customer Satisfaction Score)
+Build multi-chart layout with responsive grid system
+Charts & Visualizations:
+
+Design line chart for ticket volume trends with gradient fill and hover tooltips
+Create stacked bar chart for category distribution with color-coded bars
+Build resolution time metrics with box plots and elegant styling
+Design team performance table with sortable columns and gradient highlights
+Create SLA compliance gauge with gradient color transition (red to green)
+Build customer satisfaction trend chart with professional styling
+Design studio-wise comparison charts with side-by-side visualization
+Report Builder:
+
+Design drag-and-drop report customization interface
+Create field selector panel with glassmorphic cards
+Build date range picker with elegant calendar UI
+Design report preview with professional formatting
+Create export buttons (PDF, Excel) with icon indicators
+Build scheduled report configuration panel
+Design report history timeline
+12. Advanced Search & Filtering UI
+Design prominent search bar at top with glassmorphic styling and dark gradient focus state
+Create advanced search modal with multiple input fields
+Build filter suggestion pills that appear while typing
+Design saved search management with easy load/delete functionality
+Create search history dropdown with recent queries
+Build faceted search sidebar with collapsible categories
+Design results display with clear highlighting and pagination
+13. Mobile Responsiveness & Adaptive Design
+Ensure all glassmorphic components adapt gracefully to smaller screens
+Design mobile-optimized navigation with bottom tab bar
+Create responsive grid layouts that stack elegantly
+Build touch-friendly button sizing (minimum 44px)
+Design mobile-first cards that maintain glassmorphic aesthetic
+Create collapsible sections for dense information on mobile
+Build mobile-optimized data tables with horizontal scroll
+14. Micro-Interactions & Animations
+Design smooth page transitions with fade and subtle slide effects
+Create hover states for all interactive elements with refined elevation changes
+Build loading states with elegant skeleton screens using glassmorphic placeholders
+Design form submission feedback with subtle success animation
+Create notification entry/exit animations (slide, fade, bounce)
+Build smooth state transitions for status changes
+Design icon animations for interactive elements
+Create ripple effects on button clicks with gradient accent
+Design smooth collapse/expand animations for accordions
+Build elegant empty state illustrations with messaging
+15. Professional UI Components Library
+Create glassmorphic buttons in multiple sizes (sm, md, lg) with dark gradient hover states
+Design input fields with refined borders, placeholder text, and focus states
+Build dropdown menus with smooth animations and proper spacing
+Create modal dialogs with glassmorphic background and dark overlay
+Design cards with varied opacity levels for visual hierarchy
+Create badges and pills for tagging and status indication
+Build breadcrumb navigation with gradient separators
+Design progress bars with gradient fills
+Create tooltips with glassmorphic background and dark text
+Build data tables with alternating backgrounds and hover highlights
+Design tabs with underline indicators and gradient accents
+Create toggles and switches with smooth animations
+16. Security & Compliance
+Implement row-level security with Bolt Database
+Add comprehensive encryption for sensitive data
+Create detailed audit logs with professional formatting
+Build GDPR compliance features with elegant UI
+Implement two-factor authentication interface
+Design data retention policy management
+17. Testing & Quality Assurance
+Create comprehensive design system documentation
+Build component library with visual showcases
+Test all glassmorphic effects across browsers
+Verify accessibility contrast ratios for all text
+Test animations and transitions on various devices
+Build performance testing for animation smoothness
+Design Principles Applied Throughout
+Minimalist Sophistication: Every element serves a purpose; no unnecessary decorations
+Glassmorphism Excellence: Consistent use of backdrop blur, semi-transparent overlays, and subtle borders
+Dark Gradient Accents: Strategic use of dark gradients for focus, hierarchy, and visual interest
+White Space: Generous spacing creates breathing room and elegance
+Professional Color Palette: Limited, refined color choices enhance sophistication
+Smooth Interactions: All transitions are subtle but noticeable, creating refined feel
+Refined Typography: Careful font selection and sizing creates hierarchy and readability
+Accessibility: High contrast ratios maintain elegance while ensuring usability
+Enhanced Features with Design Integration
+Glassmorphic notification system with elegant animations
+Sophisticated dashboard with dark gradient accent highlights
+Refined form interfaces with smooth validation feedback
+Elegant status indicators with gradient color-coding
+Professional chart library with gradient styling
+Minimalist modal dialogs with backdrop blur
+Refined table design with alternating glassmorphic rows
+Sophisticated search interface with predictive suggestions
+Elegant loading states with animated skeletons
+Professional empty states with supportive messaging
