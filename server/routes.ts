@@ -1,29 +1,73 @@
 import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { setupAuth, isAuthenticated } from "./replitAuth";
+import { verifySupabaseToken } from "./supabase";
 import OpenAI from "openai";
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+// Initialize OpenAI only when an API key is provided. In development
+// allow skipping by setting NODE_ENV=development or SKIP_OPENAI=1 so
+// the server can run for UI work without an API key.
+let openai: OpenAI | null = null;
+if (process.env.OPENAI_API_KEY) {
+  openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+} else if (process.env.SKIP_OPENAI === "1" || process.env.NODE_ENV === "development") {
+  console.warn("OpenAI API key not provided — AI endpoints will return fallback responses in development.");
+} else {
+  // In production, keep the strict requirement so missing secrets fail fast.
+  throw new Error("OPENAI_API_KEY must be set in production. Set SKIP_OPENAI=1 to bypass in development.");
+}
+
+// Supabase auth middleware
+const requireAuth = async (req: Request, res: Response, next: any) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+
+    const token = authHeader.split(' ')[1];
+    const user = await verifySupabaseToken(token);
+    
+    if (!user) {
+      return res.status(401).json({ message: "Invalid or expired token" });
+    }
+
+    // Attach user to request
+    (req as any).supabaseUser = user;
+    next();
+  } catch (error) {
+    console.error('Auth error:', error);
+    res.status(401).json({ message: "Unauthorized" });
+  }
+};
 
 export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
-  // Setup authentication
-  await setupAuth(app);
 
   // Auth routes
-  app.get("/api/auth/user", isAuthenticated, async (req: Request, res: Response) => {
+  app.get("/api/auth/user", requireAuth, async (req: Request, res: Response) => {
     try {
-      const userId = (req as any).user?.claims?.sub;
-      if (!userId) {
+      const supabaseUser = (req as any).supabaseUser;
+      if (!supabaseUser) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      const user = await storage.getUser(userId);
+      
+      // Sync Supabase user to our database
+      let user = await storage.getUser(supabaseUser.id);
       if (!user) {
-        return res.status(404).json({ message: "User not found" });
+        // Create user from Supabase data
+        await storage.upsertUser({
+          id: supabaseUser.id,
+          email: supabaseUser.email || '',
+          firstName: supabaseUser.user_metadata?.first_name || supabaseUser.email?.split('@')[0] || 'User',
+          lastName: supabaseUser.user_metadata?.last_name || '',
+          profileImageUrl: supabaseUser.user_metadata?.avatar_url || null,
+        });
+        user = await storage.getUser(supabaseUser.id);
       }
+      
       res.json(user);
     } catch (error) {
       console.error("Error fetching user:", error);
@@ -32,7 +76,7 @@ export async function registerRoutes(
   });
 
   // Dashboard stats
-  app.get("/api/dashboard/stats", isAuthenticated, async (req: Request, res: Response) => {
+  app.get("/api/dashboard/stats", requireAuth, async (req: Request, res: Response) => {
     try {
       const stats = await storage.getTicketStats();
       res.json({
@@ -48,7 +92,7 @@ export async function registerRoutes(
   });
 
   // Tickets CRUD
-  app.get("/api/tickets", isAuthenticated, async (req: Request, res: Response) => {
+  app.get("/api/tickets", requireAuth, async (req: Request, res: Response) => {
     try {
       const { status, priority, categoryId, assigneeId, department, search, limit, offset } = req.query;
       const tickets = await storage.getTickets({
@@ -68,7 +112,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/tickets/:id", isAuthenticated, async (req: Request, res: Response) => {
+  app.get("/api/tickets/:id", requireAuth, async (req: Request, res: Response) => {
     try {
       const ticket = await storage.getTicket(req.params.id);
       if (!ticket) {
@@ -81,9 +125,9 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/tickets", isAuthenticated, async (req: Request, res: Response) => {
+  app.post("/api/tickets", requireAuth, async (req: Request, res: Response) => {
     try {
-      const userId = (req as any).user?.claims?.sub;
+      const userId = (req as any).supabaseUser.id;
       if (!userId) {
         return res.status(401).json({ message: "Unauthorized" });
       }
@@ -102,9 +146,9 @@ export async function registerRoutes(
     }
   });
 
-  app.patch("/api/tickets/:id", isAuthenticated, async (req: Request, res: Response) => {
+  app.patch("/api/tickets/:id", requireAuth, async (req: Request, res: Response) => {
     try {
-      const userId = (req as any).user?.claims?.sub;
+      const userId = (req as any).supabaseUser.id;
       const ticket = await storage.updateTicket(req.params.id, req.body);
       if (!ticket) {
         return res.status(404).json({ message: "Ticket not found" });
@@ -116,9 +160,9 @@ export async function registerRoutes(
     }
   });
 
-  app.patch("/api/tickets/:id/status", isAuthenticated, async (req: Request, res: Response) => {
+  app.patch("/api/tickets/:id/status", requireAuth, async (req: Request, res: Response) => {
     try {
-      const userId = (req as any).user?.claims?.sub;
+      const userId = (req as any).supabaseUser.id;
       const { status } = req.body;
       
       const existingTicket = await storage.getTicket(req.params.id);
@@ -153,9 +197,9 @@ export async function registerRoutes(
     }
   });
 
-  app.patch("/api/tickets/:id/priority", isAuthenticated, async (req: Request, res: Response) => {
+  app.patch("/api/tickets/:id/priority", requireAuth, async (req: Request, res: Response) => {
     try {
-      const userId = (req as any).user?.claims?.sub;
+      const userId = (req as any).supabaseUser.id;
       const { priority } = req.body;
       
       const existingTicket = await storage.getTicket(req.params.id);
@@ -182,7 +226,7 @@ export async function registerRoutes(
     }
   });
 
-  app.delete("/api/tickets/:id", isAuthenticated, async (req: Request, res: Response) => {
+  app.delete("/api/tickets/:id", requireAuth, async (req: Request, res: Response) => {
     try {
       const deleted = await storage.deleteTicket(req.params.id);
       if (!deleted) {
@@ -196,7 +240,7 @@ export async function registerRoutes(
   });
 
   // Ticket comments
-  app.get("/api/tickets/:id/comments", isAuthenticated, async (req: Request, res: Response) => {
+  app.get("/api/tickets/:id/comments", requireAuth, async (req: Request, res: Response) => {
     try {
       const comments = await storage.getTicketComments(req.params.id);
       res.json(comments);
@@ -206,9 +250,9 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/tickets/:id/comments", isAuthenticated, async (req: Request, res: Response) => {
+  app.post("/api/tickets/:id/comments", requireAuth, async (req: Request, res: Response) => {
     try {
-      const userId = (req as any).user?.claims?.sub;
+      const userId = (req as any).supabaseUser.id;
       if (!userId) {
         return res.status(401).json({ message: "Unauthorized" });
       }
@@ -236,9 +280,9 @@ export async function registerRoutes(
   });
 
   // Notifications
-  app.get("/api/notifications", isAuthenticated, async (req: Request, res: Response) => {
+  app.get("/api/notifications", requireAuth, async (req: Request, res: Response) => {
     try {
-      const userId = (req as any).user?.claims?.sub;
+      const userId = (req as any).supabaseUser.id;
       const notifications = await storage.getNotifications(userId);
       res.json(notifications);
     } catch (error) {
@@ -247,9 +291,9 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/notifications/unread", isAuthenticated, async (req: Request, res: Response) => {
+  app.get("/api/notifications/unread", requireAuth, async (req: Request, res: Response) => {
     try {
-      const userId = (req as any).user?.claims?.sub;
+      const userId = (req as any).supabaseUser.id;
       const notifications = await storage.getUnreadNotifications(userId);
       res.json(notifications);
     } catch (error) {
@@ -258,7 +302,7 @@ export async function registerRoutes(
     }
   });
 
-  app.patch("/api/notifications/:id/read", isAuthenticated, async (req: Request, res: Response) => {
+  app.patch("/api/notifications/:id/read", requireAuth, async (req: Request, res: Response) => {
     try {
       const marked = await storage.markNotificationRead(req.params.id);
       if (!marked) {
@@ -272,7 +316,7 @@ export async function registerRoutes(
   });
 
   // Categories and Locations
-  app.get("/api/categories", isAuthenticated, async (req: Request, res: Response) => {
+  app.get("/api/categories", requireAuth, async (req: Request, res: Response) => {
     try {
       const categories = await storage.getCategories();
       res.json(categories);
@@ -282,7 +326,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/locations", isAuthenticated, async (req: Request, res: Response) => {
+  app.get("/api/locations", requireAuth, async (req: Request, res: Response) => {
     try {
       const locations = await storage.getLocations();
       res.json(locations);
@@ -293,7 +337,7 @@ export async function registerRoutes(
   });
 
   // Users
-  app.get("/api/users", isAuthenticated, async (req: Request, res: Response) => {
+  app.get("/api/users", requireAuth, async (req: Request, res: Response) => {
     try {
       const users = await storage.getAllUsers();
       res.json(users);
@@ -304,7 +348,7 @@ export async function registerRoutes(
   });
 
   // AI Analysis endpoint
-  app.post("/api/ai/analyze", isAuthenticated, async (req: Request, res: Response) => {
+  app.post("/api/ai/analyze", requireAuth, async (req: Request, res: Response) => {
     try {
       const { text } = req.body;
       
@@ -334,6 +378,19 @@ Respond in JSON format only:
   "tags": ["tag1", "tag2"],
   "suggestedTitle": "brief title"
 }`;
+
+      if (!openai) {
+        // Return a sensible fallback when OpenAI isn't configured (development preview).
+        return res.json({
+          suggestedCategory: "miscellaneous",
+          suggestedPriority: "medium",
+          suggestedDepartment: "operations",
+          sentiment: "neutral",
+          sentimentScore: 50,
+          tags: [],
+          suggestedTitle: "",
+        });
+      }
 
       const response = await openai.chat.completions.create({
         model: "gpt-4o",

@@ -431,11 +431,11 @@ export default function Tickets() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 app-container">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Tickets</h1>
-          <p className="text-muted-foreground">
+          <h1 className="page-title">Tickets</h1>
+          <p className="page-subtitle">
             Manage and track all customer feedback tickets
           </p>
         </div>

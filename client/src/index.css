@@ -383,3 +383,43 @@
   content: '';
   @apply absolute left-[-5px] top-0 w-2 h-2 rounded-full bg-primary;
 }
+
+/* App-level layout helpers for a premium centered layout */
+.app-container {
+  max-width: 1120px; /* similar to max-w-7xl but slightly tighter */
+  margin-left: auto;
+  margin-right: auto;
+  padding-left: 1rem;
+  padding-right: 1rem;
+}
+
+/* Page header / hero for dashboards */
+.page-header {
+  @apply flex items-end justify-between gap-4 mb-6;
+}
+.page-title {
+  @apply text-3xl font-extrabold leading-tight;
+}
+.page-subtitle {
+  @apply text-sm text-muted-foreground;
+}
+
+/* Utility: subtle section card used across dashboards */
+.section-card {
+  @apply rounded-2xl border border-card-border/60 bg-card/95 p-6 shadow-md;
+}
+
+/* Smaller refinements */
+.muted-small { @apply text-sm text-muted-foreground }
+.chip { @apply inline-flex items-center gap-2 py-1 px-2 rounded-full text-xs bg-muted/60 text-muted-foreground }
+
+/* Better default input focus for premium feel */
+input:focus, textarea:focus, select:focus {
+  @apply outline-none ring-2 ring-primary/30 shadow-sm;
+}
+
+/* Make tables more airy */
+.premium-table td, .premium-table th {
+  @apply py-3 px-4 align-top;
+}
+

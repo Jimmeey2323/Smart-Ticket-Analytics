@@ -163,11 +163,11 @@ export default function Analytics() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 app-container">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Analytics</h1>
-          <p className="text-muted-foreground">
+          <h1 className="page-title">Analytics</h1>
+          <p className="page-subtitle">
             Track performance metrics and insights
           </p>
         </div>

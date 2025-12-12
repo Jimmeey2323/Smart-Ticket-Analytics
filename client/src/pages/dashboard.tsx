@@ -169,11 +169,11 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 app-container">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
-          <p className="text-muted-foreground">
+          <h1 className="page-title">Dashboard</h1>
+          <p className="page-subtitle">
             Overview of customer feedback and ticket status
           </p>
         </div>

@@ -260,7 +260,7 @@ export default function TicketDetail() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 app-container">
       <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
         <div className="flex items-start gap-4">
           <Button
@@ -281,8 +281,8 @@ export default function TicketDetail() {
                 <Badge variant="destructive">Escalated</Badge>
               )}
             </div>
-            <h1 className="text-2xl font-bold tracking-tight">{ticket.title}</h1>
-            <p className="text-muted-foreground text-sm mt-1">
+            <h1 className="page-title">{ticket.title}</h1>
+            <p className="page-subtitle mt-1">
               Created {new Date(ticket.createdAt!).toLocaleString()}
             </p>
           </div>

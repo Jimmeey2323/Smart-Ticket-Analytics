@@ -122,14 +122,14 @@ export function AppSidebar() {
   };
 
   return (
-    <Sidebar className="border-r border-sidebar-border">
+    <Sidebar className="border-r border-sidebar-border bg-sidebar/60 backdrop-blur-md shadow-lg">
       <SidebarHeader className="p-4">
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-md bg-foreground text-background font-bold text-lg">
+          <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-gradient-to-br from-sky-600 to-indigo-600 text-white font-extrabold text-lg shadow-sm">
             P57
           </div>
           <div className="flex flex-col">
-            <span className="font-semibold text-sm">Physique 57</span>
+            <span className="font-semibold text-base">Physique 57</span>
             <span className="text-xs text-muted-foreground">Ticket Management</span>
           </div>
         </div>
@@ -233,7 +233,7 @@ export function AppSidebar() {
       </SidebarContent>
 
       <SidebarFooter className="p-4">
-        <div className="flex items-center gap-3 rounded-md p-2 bg-sidebar-accent/50">
+        <div className="flex items-center gap-3 rounded-lg p-2 bg-sidebar-accent/50 hover-elevate transition-smooth">
           <Avatar className="h-8 w-8">
             <AvatarImage src={user?.profileImageUrl || undefined} className="object-cover" />
             <AvatarFallback className="text-xs">

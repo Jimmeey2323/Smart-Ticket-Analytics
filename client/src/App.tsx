@@ -29,12 +29,19 @@ function AuthenticatedLayout({ children }: { children: React.ReactNode }) {
       <div className="flex h-screen w-full">
         <AppSidebar />
         <div className="flex flex-col flex-1 overflow-hidden">
-          <header className="flex items-center justify-between gap-2 p-3 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-40">
-            <SidebarTrigger data-testid="button-sidebar-toggle" />
-            <ThemeToggle />
+          <header className="flex items-center justify-between gap-2 p-4 border-b bg-background/70 backdrop-blur-md supports-[backdrop-filter]:bg-background/60 sticky top-0 z-40 shadow-sm">
+            <div className="flex items-center gap-3">
+              <SidebarTrigger data-testid="button-sidebar-toggle" />
+              <div className="text-lg font-semibold">Physique 57</div>
+            </div>
+            <div className="flex items-center gap-2">
+              <ThemeToggle />
+            </div>
           </header>
-          <main className="flex-1 overflow-auto p-6">
-            {children}
+          <main className="flex-1 overflow-auto p-8">
+            <div className="max-w-7xl mx-auto w-full">
+              {children}
+            </div>
           </main>
         </div>
       </div>
@@ -62,7 +69,7 @@ function AuthenticatedRouter() {
 }
 
 function AppContent() {
-  const { user, isLoading } = useAuth();
+  const { session, isLoading } = useAuth();
 
   if (isLoading) {
     return (
@@ -75,7 +82,7 @@ function AppContent() {
     );
   }
 
-  if (!user) {
+  if (!session) {
     return <Landing />;
   }
 
