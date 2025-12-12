@@ -90,12 +90,26 @@ export class DatabaseStorage implements IStorage {
     const [ticket] = await db.select().from(tickets).where(eq(tickets.id, id));
     if (!ticket) return undefined;
 
+    const assigneePromise: Promise<User | undefined> = ticket.assigneeId
+      ? db
+          .select()
+          .from(users)
+          .where(eq(users.id, ticket.assigneeId))
+          .then((rows: User[]) => rows[0])
+      : Promise.resolve(undefined);
+
+    const reportedByPromise: Promise<User | undefined> = db
+      .select()
+      .from(users)
+      .where(eq(users.id, ticket.reportedById))
+      .then((rows: User[]) => rows[0]);
+
     const [comments, history, attachments, assignee, reportedBy] = await Promise.all([
       db.select().from(ticketComments).where(eq(ticketComments.ticketId, id)).orderBy(desc(ticketComments.createdAt)),
       db.select().from(ticketHistory).where(eq(ticketHistory.ticketId, id)).orderBy(desc(ticketHistory.createdAt)),
       db.select().from(ticketAttachments).where(eq(ticketAttachments.ticketId, id)),
-      ticket.assigneeId ? db.select().from(users).where(eq(users.id, ticket.assigneeId)).then(r => r[0]) : undefined,
-      db.select().from(users).where(eq(users.id, ticket.reportedById)).then(r => r[0]),
+      assigneePromise,
+      reportedByPromise,
     ]);
 
     return {
@@ -222,14 +236,14 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getTicketStats(): Promise<{ total: number; open: number; inProgress: number; pending: number; resolved: number; escalated: number }> {
-    const allTickets = await db.select().from(tickets);
+    const allTickets = (await db.select().from(tickets)) as Ticket[];
     return {
       total: allTickets.length,
-      open: allTickets.filter(t => t.status === 'open').length,
-      inProgress: allTickets.filter(t => t.status === 'in_progress').length,
-      pending: allTickets.filter(t => t.status === 'pending').length,
-      resolved: allTickets.filter(t => t.status === 'resolved' || t.status === 'closed').length,
-      escalated: allTickets.filter(t => t.isEscalated).length,
+      open: allTickets.filter((t: Ticket) => t.status === 'open').length,
+      inProgress: allTickets.filter((t: Ticket) => t.status === 'in_progress').length,
+      pending: allTickets.filter((t: Ticket) => t.status === 'pending').length,
+      resolved: allTickets.filter((t: Ticket) => t.status === 'resolved' || t.status === 'closed').length,
+      escalated: allTickets.filter((t: Ticket) => t.isEscalated).length,
     };
   }
 

@@ -29,7 +29,6 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { categories, locations, departments } from "@/lib/categories";
 import {
   ArrowLeft,
   Clock,
@@ -47,6 +46,20 @@ import {
   AlertCircle,
 } from "lucide-react";
 import type { TicketWithRelations, TicketComment, TicketHistory } from "@shared/schema";
+
+type ApiCategory = {
+  id: string;
+  name: string;
+  description?: string | null;
+  icon?: string | null;
+  color?: string | null;
+  color_code?: string | null;
+};
+
+type ApiLocation = {
+  id: string;
+  name: string;
+};
 
 const statusOptions = [
   { value: "open", label: "Open" },
@@ -156,6 +169,14 @@ export default function TicketDetail() {
     queryKey: ["/api/tickets", id],
   });
 
+  const { data: categories = [] } = useQuery<ApiCategory[]>({
+    queryKey: ["/api/categories"],
+  });
+
+  const { data: locations = [] } = useQuery<ApiLocation[]>({
+    queryKey: ["/api/locations"],
+  });
+
   const updateStatusMutation = useMutation({
     mutationFn: async (status: string) => {
       const response = await apiRequest("PATCH", `/api/tickets/${id}/status`, { status });
@@ -252,7 +273,7 @@ export default function TicketDetail() {
 
   const category = categories.find((c) => c.id === ticket.categoryId);
   const location = locations.find((l) => l.id === ticket.locationId);
-  const department = departments.find((d) => d.id === ticket.department);
+  const department = ticket.department;
 
   const handleSubmitComment = () => {
     if (!newComment.trim()) return;
@@ -593,7 +614,7 @@ export default function TicketDetail() {
                   <div className="flex items-center gap-2 text-sm">
                     <User className="h-4 w-4 text-muted-foreground" />
                     <span className="text-muted-foreground">Department:</span>
-                    <span>{department.name}</span>
+                    <span>{department}</span>
                   </div>
                 )}
               </div>

@@ -32,8 +32,16 @@ import {
   ChevronRight,
   AlertCircle,
 } from "lucide-react";
-import { categories, type CategoryData } from "@/lib/categories";
 import type { Ticket } from "@shared/schema";
+
+type ApiCategory = {
+  id: string;
+  name: string;
+  description?: string | null;
+  icon?: string | null;
+  color?: string | null;
+  color_code?: string | null;
+};
 
 type ViewType = "list" | "kanban" | "calendar" | "timeline";
 
@@ -63,7 +71,15 @@ const statusColumns = [
   { key: "closed", label: "Closed", color: "bg-slate-500" },
 ];
 
-function TicketCard({ ticket, compact = false }: { ticket: Ticket; compact?: boolean }) {
+function TicketCard({
+  ticket,
+  categories,
+  compact = false,
+}: {
+  ticket: Ticket;
+  categories: ApiCategory[];
+  compact?: boolean;
+}) {
   const priorityColors: Record<string, string> = {
     critical: "priority-critical",
     high: "priority-high",
@@ -167,7 +183,15 @@ function TicketCard({ ticket, compact = false }: { ticket: Ticket; compact?: boo
   );
 }
 
-function ListView({ tickets, isLoading }: { tickets: Ticket[]; isLoading: boolean }) {
+function ListView({
+  tickets,
+  categories,
+  isLoading,
+}: {
+  tickets: Ticket[];
+  categories: ApiCategory[];
+  isLoading: boolean;
+}) {
   if (isLoading) {
     return (
       <div className="space-y-4">
@@ -201,13 +225,21 @@ function ListView({ tickets, isLoading }: { tickets: Ticket[]; isLoading: boolea
   return (
     <div className="space-y-3">
       {tickets.map((ticket) => (
-        <TicketCard key={ticket.id} ticket={ticket} />
+        <TicketCard key={ticket.id} ticket={ticket} categories={categories} />
       ))}
     </div>
   );
 }
 
-function KanbanView({ tickets, isLoading }: { tickets: Ticket[]; isLoading: boolean }) {
+function KanbanView({
+  tickets,
+  categories,
+  isLoading,
+}: {
+  tickets: Ticket[];
+  categories: ApiCategory[];
+  isLoading: boolean;
+}) {
   const ticketsByStatus = useMemo(() => {
     const grouped: Record<string, Ticket[]> = {};
     statusColumns.forEach((col) => {
@@ -244,7 +276,7 @@ function KanbanView({ tickets, isLoading }: { tickets: Ticket[]; isLoading: bool
           </div>
           <div className="space-y-2">
             {ticketsByStatus[col.key]?.map((ticket) => (
-              <TicketCard key={ticket.id} ticket={ticket} compact />
+              <TicketCard key={ticket.id} ticket={ticket} categories={categories} compact />
             ))}
             {!ticketsByStatus[col.key]?.length && (
               <div className="p-4 text-center text-sm text-muted-foreground border border-dashed rounded-md">
@@ -409,6 +441,10 @@ export default function Tickets() {
     queryKey: ["/api/tickets"],
   });
 
+  const { data: categories = [] } = useQuery<ApiCategory[]>({
+    queryKey: ["/api/categories"],
+  });
+
   const filteredTickets = useMemo(() => {
     return tickets.filter((ticket) => {
       const matchesSearch =
@@ -523,10 +559,10 @@ export default function Tickets() {
 
         <div className="mt-4">
           <TabsContent value="list" className="m-0">
-            <ListView tickets={filteredTickets} isLoading={isLoading} />
+            <ListView tickets={filteredTickets} categories={categories} isLoading={isLoading} />
           </TabsContent>
           <TabsContent value="kanban" className="m-0">
-            <KanbanView tickets={filteredTickets} isLoading={isLoading} />
+            <KanbanView tickets={filteredTickets} categories={categories} isLoading={isLoading} />
           </TabsContent>
           <TabsContent value="calendar" className="m-0">
             <CalendarView tickets={filteredTickets} />

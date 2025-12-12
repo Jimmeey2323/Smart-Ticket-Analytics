@@ -20,8 +20,16 @@ import {
   Ticket,
   Target,
 } from "lucide-react";
-import { categories, departments } from "@/lib/categories";
 import type { Ticket as TicketType } from "@shared/schema";
+
+type ApiCategory = {
+  id: string;
+  name: string;
+  description?: string | null;
+  icon?: string | null;
+  color?: string | null;
+  color_code?: string | null;
+};
 
 interface AnalyticsData {
   totalTickets: number;
@@ -109,6 +117,10 @@ function ProgressBar({
 export default function Analytics() {
   const [period, setPeriod] = useState("month");
 
+  const { data: categories = [] } = useQuery<ApiCategory[]>({
+    queryKey: ["/api/categories"],
+  });
+
   const { data: tickets = [], isLoading } = useQuery<TicketType[]>({
     queryKey: ["/api/tickets"],
   });
@@ -142,6 +154,8 @@ export default function Analytics() {
   const resolutionRate = analytics.totalTickets > 0 
     ? Math.round((analytics.resolvedTickets / analytics.totalTickets) * 100) 
     : 0;
+
+  const departmentKeys = Object.keys(ticketsByDepartment).sort((a, b) => a.localeCompare(b));
 
   if (isLoading) {
     return (
@@ -302,11 +316,11 @@ export default function Analytics() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            {departments.map(dept => (
-              <ProgressBar 
-                key={dept.id}
-                label={dept.name} 
-                value={ticketsByDepartment[dept.id] || 0} 
+            {departmentKeys.map((dept) => (
+              <ProgressBar
+                key={dept}
+                label={dept}
+                value={ticketsByDepartment[dept] || 0}
                 total={analytics.totalTickets}
               />
             ))}
@@ -331,7 +345,7 @@ export default function Analytics() {
                   <div className="flex items-center gap-2">
                     <div 
                       className="w-3 h-3 rounded-full" 
-                      style={{ backgroundColor: cat.color }}
+                      style={{ backgroundColor: (cat as any).color_code ?? cat.color ?? undefined }}
                     />
                     <span className="text-sm">{cat.name}</span>
                   </div>

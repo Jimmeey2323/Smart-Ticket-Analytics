@@ -74,9 +74,41 @@ export const subcategories = pgTable("subcategories", {
   categoryId: varchar("category_id").references(() => categories.id).notNull(),
   name: varchar("name").notNull(),
   description: text("description"),
-  formFields: jsonb("form_fields"), // Dynamic form field configuration
+  formFields: jsonb("form_fields"), // Array of field IDs for this subcategory
   defaultDepartment: departmentEnum("default_department"),
   isActive: boolean("is_active").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Dynamic form fields definition table
+export const formFields = pgTable("form_fields", {
+  id: varchar("id").primaryKey(), // e.g., GLB-001, BT-APP-001
+  label: varchar("label").notNull(),
+  fieldType: varchar("field_type").notNull(), // Text, Dropdown, DateTime, etc.
+  options: jsonb("options"), // Array of dropdown options
+  subCategory: varchar("sub_category").notNull(),
+  category: varchar("category").notNull(),
+  uniqueId: varchar("unique_id").notNull().unique(),
+  description: text("description"),
+  isRequired: boolean("is_required").default(false).notNull(),
+  isHidden: boolean("is_hidden").default(false).notNull(),
+  validation: jsonb("validation"), // Validation rules
+  orderIndex: integer("order_index").default(0).notNull(),
+  isActive: boolean("is_active").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Field groups for organizing fields within forms
+export const fieldGroups = pgTable("field_groups", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: varchar("name").notNull(),
+  categoryId: varchar("category_id").references(() => categories.id),
+  subCategoryId: varchar("sub_category_id").references(() => subcategories.id),
+  fieldIds: jsonb("field_ids"), // Array of field IDs in this group
+  orderIndex: integer("order_index").default(0).notNull(),
+  isCollapsible: boolean("is_collapsible").default(false).notNull(),
+  isCollapsedByDefault: boolean("is_collapsed_by_default").default(false).notNull(),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
