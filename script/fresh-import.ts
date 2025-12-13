@@ -11,18 +11,29 @@ import { createClient } from '@supabase/supabase-js';
 
 // Configuration
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+// Prefer the service role key for server-side bulk upserts. Fall back to publishable key only for permissive setups.
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY;
 const SUPABASE_PUBLISHABLE_KEY = process.env.SUPABASE_PUBLISHABLE_KEY || process.env.VITE_SUPABASE_ANON_KEY;
 const CSV_FILE_PATH = './attached_assets/fields_1765467205072.csv';
 
-if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) {
-  console.error('❌ Missing required environment variables:');
-  console.error('   - SUPABASE_URL (or VITE_SUPABASE_URL)');
-  console.error('   - SUPABASE_PUBLISHABLE_KEY (or VITE_SUPABASE_ANON_KEY)');
+if (!SUPABASE_URL) {
+  console.error('❌ Missing required environment variable: SUPABASE_URL (or VITE_SUPABASE_URL)');
   process.exit(1);
 }
 
-// Initialize Supabase client with publishable key
-const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+// Use service role key when available (required for unrestricted upserts). If only publishable key is present,
+// warn because it may fail unless your RLS is permissive.
+const supabaseKeyToUse = SUPABASE_SERVICE_ROLE_KEY || SUPABASE_PUBLISHABLE_KEY;
+if (!supabaseKeyToUse) {
+  console.error('❌ Missing Supabase key. Set SUPABASE_SERVICE_ROLE_KEY or SUPABASE_PUBLISHABLE_KEY in your .env');
+  process.exit(1);
+}
+if (!SUPABASE_SERVICE_ROLE_KEY) {
+  console.warn('⚠️ Using publishable key for import. This may fail if RLS prevents inserts/updates. Prefer SUPABASE_SERVICE_ROLE_KEY.');
+}
+
+// Initialize Supabase client (prefer service role key)
+const supabase = createClient(SUPABASE_URL, supabaseKeyToUse);
 
 async function assertImportSchemaReady(): Promise<void> {
   // 1) categories table must exist

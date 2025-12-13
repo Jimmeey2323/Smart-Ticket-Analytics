@@ -43,6 +43,30 @@
   --chart-3: 30 80% 55%;
   --chart-4: 280 65% 60%;
   --chart-5: 340 75% 55%;
+
+  /* Semantic tokens (consistent visual language) */
+  --neutral: 220 6% 45%;
+  --info: 220 70% 50%;
+  --success: 160 60% 45%;
+  --warning: 45 93% 47%;
+
+  /* 8px spacing grid (opt-in tokens; Tailwind spacing remains available) */
+  --space-1: 0.5rem;  /* 8px */
+  --space-2: 1rem;    /* 16px */
+  --space-3: 1.5rem;  /* 24px */
+  --space-4: 2rem;    /* 32px */
+  --space-6: 3rem;    /* 48px */
+  --space-8: 4rem;    /* 64px */
+
+  /* Glass surfaces */
+  --glass-bg: 0 0% 100% / 0.72;
+  --glass-border: 220 6% 90% / 0.70;
+  --glass-blur: 14px;
+  --glass-shadow: var(--shadow);
+
+  /* Gradient accent (derived from existing primitives) */
+  --gradient-from: var(--foreground);
+  --gradient-to: 220 9% 2%;
   --font-sans: 'Geist', 'Inter', system-ui, sans-serif;
   --font-serif: Georgia, serif;
   --font-mono: 'Geist Mono', 'JetBrains Mono', monospace;
@@ -129,6 +153,22 @@
   --chart-3: 30 80% 60%;
   --chart-4: 280 65% 70%;
   --chart-5: 340 75% 65%;
+
+  /* Semantic tokens (dark mode variants) */
+  --neutral: 220 6% 60%;
+  --info: 220 70% 65%;
+  --success: 160 60% 55%;
+  --warning: 45 93% 52%;
+
+  /* Glass surfaces */
+  --glass-bg: 220 9% 10% / 0.55;
+  --glass-border: 220 6% 18% / 0.75;
+  --glass-blur: 14px;
+  --glass-shadow: var(--shadow-lg);
+
+  /* Gradient accent */
+  --gradient-from: var(--foreground);
+  --gradient-to: 220 9% 65%;
   --shadow-2xs: 0px 1px 2px 0px hsl(0 0% 0% / 0.10);
   --shadow-xs: 0px 1px 3px 0px hsl(0 0% 0% / 0.15);
   --shadow-sm: 0px 2px 4px 0px hsl(0 0% 0% / 0.15), 0px 1px 2px -1px hsl(0 0% 0% / 0.10);
@@ -258,6 +298,49 @@
   .hover-elevate-2:hover:not(.no-default-hover-elevate)::after,
   .active-elevate-2:active:not(.no-default-active-elevate)::after {
     background-color: var(--elevate-2);
+  }
+
+  /* Typography hierarchy (opt-in utility classes) */
+  .text-h1 { @apply text-3xl font-semibold tracking-tight; }
+  .text-h2 { @apply text-2xl font-semibold tracking-tight; }
+  .text-h3 { @apply text-xl font-semibold; }
+  .text-h4 { @apply text-lg font-medium; }
+  .text-body { @apply text-sm font-normal; }
+  .text-meta { @apply text-xs text-muted-foreground; }
+
+  /* Contextual surfaces */
+  .surface-canvas { @apply bg-background; }
+
+  .surface-card {
+    background: hsl(var(--glass-bg));
+    border: 1px solid hsl(var(--glass-border));
+    backdrop-filter: blur(var(--glass-blur));
+    box-shadow: var(--glass-shadow);
+  }
+
+  .surface-panel {
+    background: hsl(var(--glass-bg));
+    border: 1px solid hsl(var(--glass-border));
+    backdrop-filter: blur(calc(var(--glass-blur) + 2px));
+    box-shadow: var(--shadow-lg);
+  }
+
+  /* Gradient border wrapper (use on containers that already have a background) */
+  .border-gradient {
+    position: relative;
+    z-index: 0;
+  }
+  .border-gradient::before {
+    content: "";
+    position: absolute;
+    inset: -1px;
+    border-radius: inherit;
+    background: linear-gradient(
+      135deg,
+      hsl(var(--gradient-from) / 0.50),
+      hsl(var(--gradient-to) / 0.35)
+    );
+    z-index: -1;
   }
 
   .border.hover-elevate:not(.no-hover-interaction-elevate)::after,

@@ -32,6 +32,7 @@ import {
   ChevronRight,
   AlertCircle,
 } from "lucide-react";
+import { getCategoryIcon } from "@/lib/category-icons";
 import type { Ticket } from "@shared/schema";
 
 type ApiCategory = {
@@ -529,7 +530,16 @@ export default function Tickets() {
                   <SelectItem value="all">All Categories</SelectItem>
                   {categories.map((cat) => (
                     <SelectItem key={cat.id} value={cat.id}>
-                      {cat.name}
+                      {(() => {
+                        const Icon = getCategoryIcon(cat.icon);
+                        return (
+                          <span className="flex items-center gap-2">
+                            <Icon className="h-4 w-4 text-muted-foreground" />
+                            <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ backgroundColor: (cat as any).color_code ?? cat.color ?? "#6b7280" }} />
+                            <span>{cat.name}</span>
+                          </span>
+                        );
+                      })()}
                     </SelectItem>
                   ))}
                 </SelectContent>

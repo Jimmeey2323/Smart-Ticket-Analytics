@@ -453,11 +453,33 @@ export async function importFromCSV(csvFilePath: string) {
             const categoryId = categoryIdByName.get(subCategory.categoryName.trim().toLowerCase());
             if (!categoryId) continue;
 
+            const fieldsForSubCat = fieldsBySubCatKey.get(subCategoryKey) ?? [];
             const embeddedFields = {
-              fields: (fieldsBySubCatKey.get(subCategoryKey) ?? []).sort((a, b) => (a.orderIndex ?? 0) - (b.orderIndex ?? 0)),
+              fields: fieldsForSubCat.sort((a, b) => (a.orderIndex ?? 0) - (b.orderIndex ?? 0)),
             };
+            
+            // Debug logging
+            if (subCategoryKey.includes('Global')) {
+              console.log(`  [DEBUG] Processing ${subCategoryKey}: found ${fieldsForSubCat.length} fields`);
+            }
 
-            const existingSubId = subCatKeyToId.get(`${categoryId}||${subCategory.name.trim().toLowerCase()}`);
+            // Look up existing subcategory - try both the categoryId format and search by name+categoryId
+            let existingSubId = subCatKeyToId.get(`${categoryId}||${subCategory.name.trim().toLowerCase()}`);
+            
+            // If not found, try to find it by searching existing subcategories by name only
+            if (!existingSubId) {
+              for (const [key, subId] of subCatKeyToId.entries()) {
+                const [_, namePart] = key.split('||');
+                if (namePart === subCategory.name.trim().toLowerCase()) {
+                  // Found a subcategory with the same name, use it
+                  existingSubId = subId;
+                  if (subCategoryKey.includes('Global')) {
+                    console.log(`  [DEBUG] Found existing by name match: ${key} -> ${subId}`);
+                  }
+                  break;
+                }
+              }
+            }
             const payload = {
               category_id: categoryId,
               name: subCategory.name,

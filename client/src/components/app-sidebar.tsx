@@ -1,6 +1,7 @@
 import { Link, useLocation } from "wouter";
 import {
   LayoutDashboard,
+  LayoutTemplate,
   Ticket,
   PlusCircle,
   BarChart3,
@@ -12,6 +13,7 @@ import {
   Kanban,
   List,
   Clock,
+  LogOut,
 } from "lucide-react";
 import {
   Sidebar,
@@ -28,9 +30,13 @@ import {
 } from "@/components/ui/sidebar";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
 import { useQuery } from "@tanstack/react-query";
 import type { Notification } from "@shared/schema";
+import { supabase } from "@/lib/supabase";
+import { queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 
 const mainNavItems = [
   {
@@ -47,6 +53,11 @@ const mainNavItems = [
     title: "Create Ticket",
     url: "/tickets/new",
     icon: PlusCircle,
+  },
+  {
+    title: "Templates",
+    url: "/templates",
+    icon: LayoutTemplate,
   },
 ];
 
@@ -107,6 +118,7 @@ const settingsItems = [
 export function AppSidebar() {
   const [location] = useLocation();
   const { user } = useAuth();
+  const { toast } = useToast();
   
   const { data: notifications } = useQuery<Notification[]>({
     queryKey: ["/api/notifications/unread"],
@@ -119,6 +131,21 @@ export function AppSidebar() {
     const first = firstName?.charAt(0) || '';
     const last = lastName?.charAt(0) || '';
     return (first + last).toUpperCase() || 'U';
+  };
+
+  const handleSignOut = async () => {
+    try {
+      const { error } = await supabase.auth.signOut();
+      if (error) throw error;
+      queryClient.clear();
+      toast({ title: "Signed out", description: "You have been signed out." });
+    } catch (e: any) {
+      toast({
+        title: "Sign out failed",
+        description: String(e?.message || e),
+        variant: "destructive",
+      });
+    }
   };
 
   return (
@@ -233,21 +260,34 @@ export function AppSidebar() {
       </SidebarContent>
 
       <SidebarFooter className="p-4">
-        <div className="flex items-center gap-3 rounded-lg p-2 bg-sidebar-accent/50 hover-elevate transition-smooth">
-          <Avatar className="h-8 w-8">
-            <AvatarImage src={user?.profileImageUrl || undefined} className="object-cover" />
-            <AvatarFallback className="text-xs">
-              {getInitials(user?.firstName, user?.lastName)}
-            </AvatarFallback>
-          </Avatar>
-          <div className="flex flex-col flex-1 min-w-0">
-            <span className="text-sm font-medium truncate">
-              {user?.firstName} {user?.lastName}
-            </span>
-            <span className="text-xs text-muted-foreground truncate capitalize">
-              {user?.role?.replace('_', ' ') || 'Staff'}
-            </span>
+        <div className="space-y-2">
+          <div className="flex items-center gap-3 rounded-lg p-2 bg-sidebar-accent/50 hover-elevate transition-smooth">
+            <Avatar className="h-8 w-8">
+              <AvatarImage src={user?.profileImageUrl || undefined} className="object-cover" />
+              <AvatarFallback className="text-xs">
+                {getInitials(user?.firstName, user?.lastName)}
+              </AvatarFallback>
+            </Avatar>
+            <div className="flex flex-col flex-1 min-w-0">
+              <span className="text-sm font-medium truncate">
+                {user?.firstName} {user?.lastName}
+              </span>
+              <span className="text-xs text-muted-foreground truncate capitalize">
+                {user?.role?.replace('_', ' ') || 'Staff'}
+              </span>
+            </div>
           </div>
+
+          <Button
+            type="button"
+            variant="ghost"
+            className="w-full justify-start"
+            onClick={handleSignOut}
+            data-testid="button-sign-out"
+          >
+            <LogOut className="mr-2 h-4 w-4" />
+            Sign Out
+          </Button>
         </div>
       </SidebarFooter>
     </Sidebar>

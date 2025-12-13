@@ -15,6 +15,8 @@ import Tickets from "@/pages/tickets";
 import CreateTicket from "@/pages/create-ticket";
 import TicketDetail from "@/pages/ticket-detail";
 import Analytics from "@/pages/analytics";
+import SettingsPage from "@/pages/settings";
+import Templates from "@/pages/templates";
 import NotFound from "@/pages/not-found";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -56,12 +58,13 @@ function AuthenticatedRouter() {
         <Route path="/" component={Dashboard} />
         <Route path="/tickets" component={Tickets} />
         <Route path="/tickets/new" component={CreateTicket} />
+        <Route path="/templates" component={Templates} />
         <Route path="/tickets/:id" component={TicketDetail} />
         <Route path="/analytics" component={Analytics} />
         <Route path="/analytics/team" component={Analytics} />
         <Route path="/filters" component={NotFound} />
         <Route path="/notifications" component={NotFound} />
-        <Route path="/settings" component={NotFound} />
+        <Route path="/settings" component={SettingsPage} />
         <Route component={NotFound} />
       </Switch>
     </AuthenticatedLayout>

@@ -1,14 +1,21 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { Label } from '@/components/ui/label';
 import { FieldDefinition, FieldType } from '@shared/ticket-schema';
+import { FIELD_DEFINITIONS } from '@shared/field-definitions';
+import { getCategoryIcon } from '@/lib/category-icons';
+import { ArrowRight, CheckCircle2 } from 'lucide-react';
 
 interface CategorySelectorProps {
-  onCategorySelect: (categoryId: string, subCategoryId: string, fields: FieldDefinition[]) => void;
+  onCategorySelect: (
+    categoryId: string,
+    subCategoryId: string,
+    fields: FieldDefinition[],
+    meta?: { categoryName?: string; subCategoryName?: string }
+  ) => void;
   selectedCategory?: string;
   selectedSubCategory?: string;
 }
@@ -20,6 +27,7 @@ export const CategorySelector: React.FC<CategorySelectorProps> = ({
 }) => {
   const [category, setCategory] = useState<string>(selectedCategory || '');
   const [subCategory, setSubCategory] = useState<string>(selectedSubCategory || '');
+  const lastAutoSelectedRef = useRef<string>('');
 
   type ApiCategory = {
     id: string;
@@ -42,6 +50,10 @@ export const CategorySelector: React.FC<CategorySelectorProps> = ({
 
   const { data: categories = [], isLoading: categoriesLoading } = useQuery<ApiCategory[]>({
     queryKey: ['/api/categories'],
+    // Categories can change when admins/import scripts seed new templates.
+    // Override global infinite caching so users can see updates without a hard refresh.
+    staleTime: 0,
+    refetchOnMount: 'always',
   });
 
   const globalCategoryId = useMemo(() => {
@@ -52,15 +64,138 @@ export const CategorySelector: React.FC<CategorySelectorProps> = ({
   const { data: globalSubCategories = [] } = useQuery<ApiSubcategory[]>({
     queryKey: globalCategoryId ? ['/api/categories', globalCategoryId, 'subcategories'] : ['_global_subcategories_disabled'],
     enabled: !!globalCategoryId,
+    staleTime: 0,
+    refetchOnMount: 'always',
   });
 
   const { data: subCategories = [], isLoading: subCategoriesLoading } = useQuery<ApiSubcategory[]>({
     queryKey: category ? ['/api/categories', category, 'subcategories'] : ['_subcategories_disabled'],
     enabled: !!category,
+    staleTime: 0,
+    refetchOnMount: 'always',
   });
 
   const selectedCategoryData = useMemo(() => categories.find(c => c.id === category) ?? null, [categories, category]);
-  const selectedSubCategoryData = useMemo(() => subCategories.find(sc => sc.id === subCategory) ?? null, [subCategories, subCategory]);
+
+  const getCategoryColor = (cat: ApiCategory | null | undefined): string => {
+    return String((cat as any)?.color_code ?? cat?.color ?? '').trim() || '#6b7280';
+  };
+
+  const toRgba = (color: string, alpha: number): string => {
+    const c = (color || '').trim();
+    // Supports #RRGGBB / #RGB
+    const hex = c.startsWith('#') ? c.slice(1) : c;
+    if (/^[0-9a-fA-F]{3}$/.test(hex)) {
+      const r = parseInt(hex[0] + hex[0], 16);
+      const g = parseInt(hex[1] + hex[1], 16);
+      const b = parseInt(hex[2] + hex[2], 16);
+      return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+    }
+    if (/^[0-9a-fA-F]{6}$/.test(hex)) {
+      const r = parseInt(hex.slice(0, 2), 16);
+      const g = parseInt(hex.slice(2, 4), 16);
+      const b = parseInt(hex.slice(4, 6), 16);
+      return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+    }
+    // Fall back to opaque CSS color (best-effort)
+    return c;
+  };
+
+  const availableSubCategories = useMemo(() => {
+    // Some datasets/joins can yield duplicate-looking values; choose the “best” row per name.
+    const bestByName = new Map<string, ApiSubcategory>();
+    for (const sc of subCategories) {
+      const nameKey = String(sc.name ?? '').trim().toLowerCase();
+      if (!nameKey) continue;
+      const current = bestByName.get(nameKey);
+      if (!current) {
+        bestByName.set(nameKey, sc);
+        continue;
+      }
+
+      const currentFieldsLen = extractEmbeddedFields(current).length;
+      const candidateFieldsLen = extractEmbeddedFields(sc).length;
+      // Prefer the entry with richer form schema; otherwise keep the first.
+      if (candidateFieldsLen > currentFieldsLen) bestByName.set(nameKey, sc);
+    }
+
+    return Array.from(bestByName.values()).sort((a, b) =>
+      String(a.name ?? '').localeCompare(String(b.name ?? ''), undefined, { sensitivity: 'base' })
+    );
+  }, [subCategories]);
+
+  useEffect(() => {
+    if (!subCategory) return;
+    // When deep-linking from Templates, allow the preselected subcategory to
+    // remain while the subcategory list is still loading.
+    if (subCategoriesLoading) return;
+
+    if (subCategory && !availableSubCategories.some(sc => sc.id === subCategory)) {
+      setSubCategory('');
+    }
+  }, [subCategory, availableSubCategories, subCategoriesLoading]);
+
+  // Ensure we have a stable, id-deduped list — some backends may return logically
+  // duplicate rows with different metadata; prefer the first seen per id.
+  const uniqueSubCategories = useMemo(() => {
+    const map = new Map<string, ApiSubcategory>();
+    for (const sc of availableSubCategories) {
+      if (!map.has(sc.id)) map.set(sc.id, sc);
+    }
+    return Array.from(map.values());
+  }, [availableSubCategories]);
+
+  useEffect(() => {
+    if (!subCategory) return;
+    if (subCategoriesLoading) return;
+
+    if (subCategory && !uniqueSubCategories.some(sc => sc.id === subCategory)) {
+      setSubCategory('');
+    }
+  }, [subCategory, uniqueSubCategories, subCategoriesLoading]);
+
+  // Keep internal state in sync when parent provides preselected values.
+  useEffect(() => {
+    if (selectedCategory !== undefined && selectedCategory !== category) {
+      setCategory(selectedCategory || '');
+      setSubCategory('');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedCategory]);
+
+  useEffect(() => {
+    if (selectedSubCategory !== undefined && selectedSubCategory !== subCategory) {
+      setSubCategory(selectedSubCategory || '');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedSubCategory]);
+
+  const selectedSubCategoryData = useMemo(
+    () => uniqueSubCategories.find(sc => sc.id === subCategory) ?? null,
+    [uniqueSubCategories, subCategory]
+  );
+
+  // Auto-run selection when both category + subcategory are provided.
+  // This enables "Use Template" deep-links to prefill category/subcategory and open the form.
+  useEffect(() => {
+    const desiredCategory = (selectedCategory || '').trim();
+    const desiredSubCategory = (selectedSubCategory || '').trim();
+
+    if (!desiredCategory || !desiredSubCategory) return;
+    if (category !== desiredCategory) return;
+    if (subCategory !== desiredSubCategory) return;
+
+    const token = `${desiredCategory}::${desiredSubCategory}`;
+    if (lastAutoSelectedRef.current === token) return;
+
+    const categoryExists = categories.some((c) => c.id === desiredCategory);
+    const subCategoryExists = uniqueSubCategories.some((sc) => sc.id === desiredSubCategory);
+    if (!categoryExists || !subCategoryExists || !selectedCategoryData) return;
+
+    lastAutoSelectedRef.current = token;
+    handleSubCategoryChange(desiredSubCategory);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedCategory, selectedSubCategory, category, subCategory, categories, uniqueSubCategories, selectedCategoryData]);
 
   function extractEmbeddedFields(sc: ApiSubcategory | null | undefined): any[] {
     if (!sc) return [];
@@ -74,14 +209,15 @@ export const CategorySelector: React.FC<CategorySelectorProps> = ({
   function mapEmbeddedTypeToFieldType(raw: string): FieldType {
     const t = (raw || '').trim();
     // Already a supported FieldType
-    if (t === 'Auto-generated' || t === 'DateTime' || t === 'Dropdown' || t === 'Text' || t === 'Email' || t === 'Phone' || t === 'Long Text' || t === 'Checkbox' || t === 'File Upload' || t === 'Number') {
+    if (t === 'Auto-generated' || t === 'DateTime' || t === 'Date' || t === 'Dropdown' || t === 'Text' || t === 'Email' || t === 'Phone' || t === 'Long Text' || t === 'Checkbox' || t === 'File Upload' || t === 'Number') {
       return t;
     }
 
     const lower = t.toLowerCase();
     if (lower === 'dropdown' || lower === 'select' || lower === 'radio') return 'Dropdown';
     if (lower === 'textarea' || lower === 'longtext' || lower === 'long text') return 'Long Text';
-    if (lower === 'datetime' || lower === 'date' || lower === 'time') return 'DateTime';
+    if (lower === 'date') return 'Date';
+    if (lower === 'datetime' || lower === 'time') return 'DateTime';
     if (lower === 'email') return 'Email';
     if (lower === 'tel' || lower === 'phone') return 'Phone';
     if (lower === 'number') return 'Number';
@@ -118,11 +254,13 @@ export const CategorySelector: React.FC<CategorySelectorProps> = ({
   const handleSubCategoryChange = (subCategoryId: string) => {
     setSubCategory(subCategoryId);
 
-    const sc = subCategories.find(s => s.id === subCategoryId);
+    const sc = uniqueSubCategories.find(s => s.id === subCategoryId);
     if (!sc || !selectedCategoryData) return;
 
     const globalSc = globalSubCategories.find(s => (s.name ?? '').toLowerCase() === 'global') ?? null;
-    const globalFields = extractEmbeddedFields(globalSc).map(f => toFieldDefinition(f, 'Global', 'Global'));
+    const embeddedGlobalFields = extractEmbeddedFields(globalSc).map(f => toFieldDefinition(f, 'Global', 'Global'));
+    const staticGlobalFields = FIELD_DEFINITIONS.filter((f) => (f.category ?? '').toLowerCase() === 'global');
+    const globalFields = embeddedGlobalFields.length > 0 ? embeddedGlobalFields : staticGlobalFields;
 
     const subFields = extractEmbeddedFields(sc).map(f => toFieldDefinition(f, selectedCategoryData.name, sc.name));
 
@@ -130,161 +268,299 @@ export const CategorySelector: React.FC<CategorySelectorProps> = ({
     const deduped = Array.from(new Map(all.map(f => [f.id, f])).values());
     const visibleFields = deduped.filter(f => !f.isHidden);
 
-    onCategorySelect(category, subCategoryId, visibleFields);
+    onCategorySelect(category, subCategoryId, visibleFields, {
+      categoryName: selectedCategoryData.name,
+      subCategoryName: sc.name,
+    });
   };
 
-  const availableSubCategories = subCategories;
-
   return (
-    <Card className="w-full max-w-4xl mx-auto mb-6">
-      <CardHeader>
-        <CardTitle>Select Ticket Category</CardTitle>
-        <CardDescription>
-          Choose the main category and specific subcategory for your ticket. This will determine which fields are available.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Category Selection */}
-          <div className="space-y-3">
-            <Label htmlFor="category-select" className="text-sm font-medium">
-              Main Category
-            </Label>
-            <Select value={category} onValueChange={handleCategoryChange}>
-              <SelectTrigger id="category-select">
-                <SelectValue placeholder="Select a category" />
-              </SelectTrigger>
-              <SelectContent>
+    <div className="w-full mx-auto mb-6">
+      <div className="space-y-8">
+        {/* Step 1: Category Selection */}
+        <AnimatePresence mode="wait">
+          {!category && (
+            <motion.div
+              key="category-selection"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              transition={{ duration: 0.3 }}
+              className="space-y-6"
+            >
+              <div className="text-center mb-8">
+                <motion.div
+                  className="inline-flex items-center justify-center w-12 h-12 rounded-2xl font-bold text-base bg-gradient-to-br from-blue-500 to-indigo-600 text-white shadow-lg mb-3"
+                  animate={{ scale: [1, 1.05, 1] }}
+                  transition={{ duration: 2, repeat: Infinity }}
+                >
+                  1
+                </motion.div>
+                <h2 className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">Select Ticket Category</h2>
+                <p className="text-sm text-gray-600 mt-2">Choose the main category for your support ticket</p>
+              </div>
+
+              <motion.div 
+                className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.3 }}
+              >
                 {categories
                   .filter(cat => (cat.name ?? '').toLowerCase() !== 'global')
-                  .map((cat) => (
-                  <SelectItem key={cat.id} value={cat.id}>
-                    <div className="flex items-center space-x-2">
-                      <div 
-                        className="w-3 h-3 rounded-full" 
-                        style={{ backgroundColor: (cat as any).color_code ?? cat.color ?? '#6b7280' }}
-                      />
-                      <span>{cat.name}</span>
-                    </div>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            
-            {selectedCategoryData && (
-              <div className="p-3 bg-gray-50 rounded-lg">
-                <div className="flex items-center space-x-2 mb-2">
-                  <div 
-                    className="w-3 h-3 rounded-full" 
-                    style={{ backgroundColor: (selectedCategoryData as any).color_code ?? selectedCategoryData.color ?? '#6b7280' }}
-                  />
-                  <span className="font-medium">{selectedCategoryData.name}</span>
-                </div>
-                {selectedCategoryData.description && (
-                  <p className="text-sm text-gray-600">{selectedCategoryData.description}</p>
-                )}
-              </div>
-            )}
-          </div>
+                  .map((cat, idx) => {
+                    const color = getCategoryColor(cat);
+                    const Icon = getCategoryIcon(cat.icon);
 
-          {/* Subcategory Selection */}
-          <div className="space-y-3">
-            <Label htmlFor="subcategory-select" className="text-sm font-medium">
-              Subcategory
-            </Label>
-            <Select 
-              value={subCategory} 
-              onValueChange={handleSubCategoryChange}
-              disabled={!category || subCategoriesLoading}
+                    return (
+                      <motion.div
+                        key={cat.id}
+                        initial={{ opacity: 0, y: 20, scale: 0.9 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        transition={{ duration: 0.3, delay: idx * 0.08 }}
+                        whileHover={{ y: -6, scale: 1.02 }}
+                        whileTap={{ scale: 0.97 }}
+                        onClick={() => handleCategoryChange(cat.id)}
+                        className="group relative cursor-pointer transition-all"
+                      >
+                        {/* Glassmorphic background */}
+                        <div className="absolute inset-0 rounded-lg bg-white/40 backdrop-blur-md border border-white/60 group-hover:bg-white/50 transition-all duration-300" />
+
+                        {/* Thick left colored border */}
+                        <div
+                          className="absolute left-0 top-0 bottom-0 w-1.5 rounded-l-lg transition-all duration-300"
+                          style={{ backgroundColor: color }}
+                        />
+
+                        {/* Content container */}
+                        <div className="relative p-4 flex items-center gap-3 h-24">
+                          {/* Icon with animation */}
+                          <motion.div
+                            className="flex-shrink-0 flex items-center justify-center w-12 h-12 rounded-lg transition-all"
+                            style={{
+                              background: `linear-gradient(135deg, ${toRgba(color, 0.2)} 0%, ${toRgba(color, 0.08)} 100%)`,
+                            }}
+                            whileHover={{ scale: 1.1, rotate: 8 }}
+                          >
+                            <Icon className="w-6 h-6" style={{ color }} />
+                          </motion.div>
+
+                          {/* Text content */}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <h3 className="font-bold text-sm text-gray-900">{cat.name}</h3>
+                            </div>
+                            {cat.description && (
+                              <p className="text-xs text-gray-600 line-clamp-2 mt-1">{cat.description}</p>
+                            )}
+                          </div>
+
+                          {/* Analytics on hover */}
+                          <motion.div
+                            className="flex-shrink-0 flex flex-col items-end gap-1"
+                            initial={{ opacity: 0, x: 10 }}
+                            whileHover={{ opacity: 1, x: 0 }}
+                            transition={{ duration: 0.2 }}
+                          >
+                            <div className="text-xs font-semibold text-gray-700">12 tickets</div>
+                            <div className="text-xs text-gray-500">Avg: 2.4h</div>
+                          </motion.div>
+                        </div>
+                      </motion.div>
+                    );
+                  })}
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Step 2: Subcategory Selection */}
+        <AnimatePresence mode="wait">
+          {category && (
+            <motion.div
+              key="subcategories"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              transition={{ duration: 0.3 }}
+              className="space-y-6"
             >
-              <SelectTrigger id="subcategory-select">
-                <SelectValue placeholder="Select a subcategory" />
-              </SelectTrigger>
-              <SelectContent>
-                {availableSubCategories.map((subCat) => (
-                  <SelectItem key={subCat.id} value={subCat.id}>
-                    {subCat.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            {selectedSubCategoryData && (
-              <div className="p-3 bg-gray-50 rounded-lg">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="font-medium">{selectedSubCategoryData.name}</span>
-                  <Badge variant="secondary" className="text-xs">
-                    {extractEmbeddedFields(selectedSubCategoryData).length} fields
-                  </Badge>
-                </div>
-                {selectedSubCategoryData.description && (
-                  <p className="text-sm text-gray-600">{selectedSubCategoryData.description}</p>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Field Preview */}
-        {selectedSubCategoryData && (
-          <div className="border-t pt-6">
-            <h4 className="text-sm font-medium mb-3">Available Fields Preview</h4>
-            <div className="flex flex-wrap gap-2">
-              {(() => {
-                const globalSc = globalSubCategories.find(s => (s.name ?? '').toLowerCase() === 'global') ?? null;
-                const globalFields = extractEmbeddedFields(globalSc).map(f => toFieldDefinition(f, 'Global', 'Global'));
-                const subFields = extractEmbeddedFields(selectedSubCategoryData).map(f => toFieldDefinition(f, selectedCategoryData?.name ?? '', selectedSubCategoryData.name));
-                const all = [...globalFields, ...subFields];
-                const deduped = Array.from(new Map(all.map(f => [f.id, f])).values());
-                return deduped.filter(f => !f.isHidden);
-              })().map((field) => (
-                  <Badge 
-                    key={field.id} 
-                    variant={field.isRequired ? "default" : "outline"}
-                    className="text-xs"
-                  >
-                    {field.label}
-                    {field.isRequired && <span className="ml-1 text-red-400">*</span>}
-                  </Badge>
-                ))}
-            </div>
-            <p className="text-xs text-gray-500 mt-2">
-              <span className="font-medium">*</span> Required fields are shown with an asterisk
-            </p>
-          </div>
-        )}
-
-        {/* Quick Category Overview */}
-        {!category && (
-          <div className="border-t pt-6">
-            <h4 className="text-sm font-medium mb-3">Available Categories</h4>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {categories
-                .filter(cat => (cat.name ?? '').toLowerCase() !== 'global')
-                .map((cat) => (
-                <div 
-                  key={cat.id}
-                  className="p-3 border rounded-lg hover:bg-gray-50 cursor-pointer transition-colors"
-                  onClick={() => handleCategoryChange(cat.id)}
+              <div className="text-center mb-8 relative">
+                <motion.div
+                  className={`inline-flex items-center justify-center w-12 h-12 rounded-2xl font-bold text-base ${subCategory ? 'bg-gradient-to-br from-green-500 to-green-600' : 'bg-gradient-to-br from-blue-500 to-indigo-600'} text-white shadow-lg mb-3`}
+                  animate={{ scale: [1, 1.05, 1] }}
+                  transition={{ duration: 2, repeat: Infinity }}
                 >
-                  <div className="flex items-center space-x-2 mb-1">
-                    <div 
-                      className="w-3 h-3 rounded-full" 
-                      style={{ backgroundColor: (cat as any).color_code ?? cat.color ?? '#6b7280' }}
+                  {subCategory ? <CheckCircle2 className="w-7 h-7" /> : '2'}
+                </motion.div>
+                <h2 className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">Select Subcategory</h2>
+                <p className="text-sm text-gray-600 mt-2">Choose the specific issue type within <span className="font-semibold text-gray-800">{selectedCategoryData?.name}</span></p>
+                <motion.button
+                  onClick={() => {
+                    setCategory('');
+                    setSubCategory('');
+                  }}
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  className="absolute right-0 top-0 px-4 py-2 rounded-lg text-sm font-medium bg-white/80 hover:bg-white border border-gray-200 text-gray-700 transition-all shadow-sm backdrop-blur-sm"
+                >
+                  ← Change Category
+                </motion.button>
+              </div>
+
+              {subCategoriesLoading ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                  {[1, 2, 3, 4].map((i) => (
+                    <div
+                      key={i}
+                      className="h-28 rounded-2xl bg-gradient-to-br from-gray-200 to-gray-300 animate-pulse"
                     />
-                    <span className="font-medium text-sm">{cat.name}</span>
-                  </div>
-                  <p className="text-xs text-gray-600">{cat.description}</p>
-                  <Badge variant="outline" className="text-xs mt-2">
-                    {/* count not available without fetching subcats per card */}
-                    View subcategories
-                  </Badge>
+                  ))}
                 </div>
-              ))}
-            </div>
-          </div>
-        )}
-      </CardContent>
-    </Card>
+              ) : (
+                <motion.div
+                  className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ duration: 0.3 }}
+                >
+                  {uniqueSubCategories.map((subCat, idx) => {
+                    const isSubSelected = subCat.id === subCategory;
+                    const fieldCount = extractEmbeddedFields(subCat).length;
+                    const catColor = getCategoryColor(selectedCategoryData);
+
+                    return (
+                      <motion.div
+                        key={subCat.id}
+                        initial={{ opacity: 0, y: 20, scale: 0.9 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        transition={{ duration: 0.3, delay: idx * 0.08 }}
+                        whileHover={{ y: -6, scale: 1.02 }}
+                        whileTap={{ scale: 0.97 }}
+                        onClick={() => handleSubCategoryChange(subCat.id)}
+                        className="group relative cursor-pointer transition-all"
+                      >
+                        {/* Glassmorphic background - highlighted on selection */}
+                        <div className={`absolute inset-0 rounded-lg transition-all duration-300 ${
+                          isSubSelected 
+                            ? 'bg-white/60 border border-white/80' 
+                            : 'bg-white/40 border border-white/60 group-hover:bg-white/50'
+                        }`} />
+
+                        {/* Thick left colored border */}
+                        <div
+                          className={`absolute left-0 top-0 bottom-0 w-1.5 rounded-l-lg transition-all duration-300 ${isSubSelected ? 'w-2' : ''}`}
+                          style={{ backgroundColor: catColor }}
+                        />
+
+                        {/* Content container */}
+                        <div className="relative p-4 flex items-center gap-3 h-24">
+                          {/* Icon with animation */}
+                          <motion.div
+                            className="flex-shrink-0 flex items-center justify-center w-12 h-12 rounded-lg transition-all"
+                            style={{
+                              background: `linear-gradient(135deg, ${toRgba(catColor, 0.2)} 0%, ${toRgba(catColor, 0.08)} 100%)`,
+                            }}
+                            animate={{ rotate: isSubSelected ? 360 : 0 }}
+                            transition={{ duration: 0.6 }}
+                            whileHover={{ scale: 1.1, rotate: 8 }}
+                          >
+                            {getCategoryIcon(selectedCategoryData?.icon) && 
+                              React.createElement(getCategoryIcon(selectedCategoryData?.icon), {
+                                className: 'w-6 h-6',
+                                style: { color: catColor },
+                              })
+                            }
+                          </motion.div>
+
+                          {/* Text content */}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <h3 className="font-bold text-sm text-gray-900">{subCat.name}</h3>
+                              {isSubSelected && (
+                                <motion.div
+                                  initial={{ scale: 0, rotate: -180 }}
+                                  animate={{ scale: 1, rotate: 0 }}
+                                  transition={{ type: 'spring', stiffness: 200 }}
+                                >
+                                  <CheckCircle2 className="w-4 h-4 text-green-500 flex-shrink-0" />
+                                </motion.div>
+                              )}
+                            </div>
+                            {subCat.description && (
+                              <p className="text-xs text-gray-600 line-clamp-1 mt-1">{subCat.description}</p>
+                            )}
+                          </div>
+
+                          {/* Analytics on hover */}
+                          <motion.div
+                            className="flex-shrink-0 flex flex-col items-end gap-1"
+                            initial={{ opacity: 0, x: 10 }}
+                            whileHover={{ opacity: 1, x: 0 }}
+                            transition={{ duration: 0.2 }}
+                          >
+                            <div className="text-xs font-semibold text-gray-700">{fieldCount} fields</div>
+                            <div className="text-xs text-gray-500">Avg: 8 min</div>
+                          </motion.div>
+                        </div>
+                      </motion.div>
+                    );
+                  })}
+                </motion.div>
+              )}
+
+              {/* Field Preview */}
+              {selectedSubCategoryData && (
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.4, delay: 0.15 }}
+                  className="mt-8 p-6 rounded-2xl bg-white/40 backdrop-blur-md border border-white/60 transition-all"
+                >
+                  <div className="flex items-center gap-2 mb-4">
+                    <h4 className="text-base font-bold text-gray-900">Available Fields</h4>
+                    <Badge variant="secondary" className="text-xs">
+                      {(() => {
+                        const globalSc = globalSubCategories.find(s => (s.name ?? '').toLowerCase() === 'global') ?? null;
+                        const globalFields = extractEmbeddedFields(globalSc).map(f => toFieldDefinition(f, 'Global', 'Global'));
+                        const subFields = extractEmbeddedFields(selectedSubCategoryData).map(f => toFieldDefinition(f, selectedCategoryData?.name ?? '', selectedSubCategoryData.name));
+                        const all = [...globalFields, ...subFields];
+                        const deduped = Array.from(new Map(all.map(f => [f.id, f])).values());
+                        return deduped.filter(f => !f.isHidden).length;
+                      })()} fields
+                    </Badge>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {(() => {
+                      const globalSc = globalSubCategories.find(s => (s.name ?? '').toLowerCase() === 'global') ?? null;
+                      const globalFields = extractEmbeddedFields(globalSc).map(f => toFieldDefinition(f, 'Global', 'Global'));
+                      const subFields = extractEmbeddedFields(selectedSubCategoryData).map(f => toFieldDefinition(f, selectedCategoryData?.name ?? '', selectedSubCategoryData.name));
+                      const all = [...globalFields, ...subFields];
+                      const deduped = Array.from(new Map(all.map(f => [f.id, f])).values());
+                      return deduped.filter(f => !f.isHidden);
+                    })().map((field, idx) => (
+                      <motion.div
+                        key={field.id}
+                        initial={{ opacity: 0, scale: 0.8, y: 10 }}
+                        animate={{ opacity: 1, scale: 1, y: 0 }}
+                        transition={{ duration: 0.2, delay: idx * 0.04 }}
+                      >
+                        <Badge 
+                          variant={field.isRequired ? "default" : "outline"}
+                          className="text-xs font-semibold px-2.5 py-1"
+                        >
+                          {field.label}
+                          {field.isRequired && <span className="ml-1.5 font-bold">*</span>}
+                        </Badge>
+                      </motion.div>
+                    ))}
+                  </div>
+                </motion.div>
+              )}
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+    </div>
   );
 };

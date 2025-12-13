@@ -42,6 +42,7 @@ async function main() {
       alter table public.users
         add column if not exists first_name text,
         add column if not exists last_name text,
+        add column if not exists full_name text not null default '',
         add column if not exists profile_image_url text,
         add column if not exists role text,
         add column if not exists department text,

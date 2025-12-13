@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { FieldDefinition, TicketFormData, FieldType } from '@shared/ticket-schema';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -7,10 +7,14 @@ import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Calendar } from '@/components/ui/calendar';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { CalendarIcon, Upload } from 'lucide-react';
-import { format } from 'date-fns';
+import { Badge } from '@/components/ui/badge';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+import { ClipboardList, FileText, MapPin, Paperclip, ShieldCheck, Timer, Upload, UserRound } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import { useAuth } from '@/hooks/useAuth';
+import { apiRequest } from '@/lib/queryClient';
+
+type FormMode = 'create' | 'update';
 
 interface DynamicFormProps {
   fields: FieldDefinition[];
@@ -19,6 +23,16 @@ interface DynamicFormProps {
   isLoading?: boolean;
   title?: string;
   description?: string;
+  mode?: FormMode;
+  fieldGroups?: Array<{
+    id: string;
+    name: string;
+    fieldIds?: any;
+    orderIndex?: number;
+    isCollapsible?: boolean;
+    isCollapsedByDefault?: boolean;
+  }>;
+  context?: { categoryName?: string; subCategoryName?: string };
 }
 
 export const DynamicForm: React.FC<DynamicFormProps> = ({
@@ -27,16 +41,724 @@ export const DynamicForm: React.FC<DynamicFormProps> = ({
   initialData = {},
   isLoading = false,
   title = "Create Ticket",
-  description = "Fill in the details below to create a new ticket"
+  description = "Fill in the details below to create a new ticket",
+  mode = 'create',
+  fieldGroups = [],
+  context
 }) => {
+  const { user } = useAuth();
   const [formData, setFormData] = useState<TicketFormData>(initialData);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  const visibleFields = fields.filter(field => !field.isHidden);
+  const isHostedClassTemplate = String(context?.subCategoryName ?? '').toLowerCase().includes('hosted class');
+
+  // Keep local state in sync when caller changes initialData (e.g., category switch)
+  useEffect(() => {
+    setFormData(initialData);
+    setErrors({});
+  }, [initialData]);
+
+  const isTicketIdField = (field: FieldDefinition) => field.id === 'GLB-001' || field.label.trim().toLowerCase() === 'ticket id';
+  const isReportedDateTimeField = (field: FieldDefinition) => field.id === 'GLB-002' || field.label.trim().toLowerCase() === 'date & time reported';
+  const isReportedByStaffField = (field: FieldDefinition) => field.id === 'GLB-005' || field.label.toLowerCase().includes('reported by');
+  const isAssignedToField = (field: FieldDefinition) => field.id === 'Assigned To' || field.label.trim().toLowerCase().includes('assigned to');
+  const isStatusField = (field: FieldDefinition) => field.id === 'Status' || field.label.trim().toLowerCase() === 'status';
+
+  const isAutoField = (field: FieldDefinition) => isTicketIdField(field) || isReportedDateTimeField(field);
+  const isFieldEditable = (field: FieldDefinition) => {
+    if (mode === 'create' && isAutoField(field)) return false;
+    if (mode === 'create' && isStatusField(field)) return false;
+    if (field.fieldType === 'Auto-generated') return false;
+    return true;
+  };
+
+  const CLIENT_FIELD_IDS = new Set(['GLB-006', 'GLB-007', 'GLB-008', 'GLB-009', 'GLB-014']);
+  const [includeClientDetails, setIncludeClientDetails] = useState(false);
+
+  const isClientField = (field: FieldDefinition) => CLIENT_FIELD_IDS.has(field.id);
+  const isEffectivelyRequired = (field: FieldDefinition) => {
+    // Client details should not be required unless the template explicitly enforces it.
+    // In current data, global client fields are marked required; override per requirements.
+    if (isClientField(field)) return false;
+    return field.isRequired;
+  };
+
+  // Fetch staff list for dropdown options (Reported By, Assigned To if present)
+  const { data: staffUsers = [] } = useQuery<any[]>({
+    queryKey: ['/api/users'],
+    enabled: true,
+  });
+
+  const staffOptions = useMemo(() => {
+    const opts = staffUsers
+      .map((u) => {
+        const first = String(u?.firstName ?? '').trim();
+        const last = String(u?.lastName ?? '').trim();
+        const name = `${first} ${last}`.trim();
+        return name || String(u?.email ?? '').trim() || String(u?.id ?? '').trim();
+      })
+      .filter(Boolean);
+    return Array.from(new Set(opts));
+  }, [staffUsers]);
+
+  const getSectionAccentCssVar = (key: string): string => {
+    // Uses existing theme primitives defined in client/src/index.css
+    switch (key) {
+      case 'global':
+        return '--chart-1';
+      case 'issue_details':
+        return '--chart-3';
+      case 'reporter_client':
+        return '--chart-2';
+      case 'timeline':
+        return '--chart-4';
+      case 'location':
+        return '--chart-5';
+      case 'operational':
+        return '--chart-2';
+      case 'actions':
+        return '--chart-3';
+      case 'attachments':
+        return '--chart-4';
+      default:
+        return '--chart-1';
+    }
+  };
+
+  const getSectionAccentColor = (key: string): string => `hsl(var(${getSectionAccentCssVar(key)}))`;
+
+  const getFieldSpanClass = (field: FieldDefinition): string => {
+    const label = field.label.trim().toLowerCase();
+    if (field.fieldType === 'Long Text') return 'md:col-span-2';
+    if (field.fieldType === 'File Upload') return 'md:col-span-2';
+    if (label.includes('issue description')) return 'md:col-span-2';
+    if (label.includes('class details')) return 'md:col-span-2';
+    if (label.includes('action taken')) return 'md:col-span-2';
+    return '';
+  };
+
+  // Auto-populate Date & Time Reported and Reported By (Staff)
+  useEffect(() => {
+    if (mode !== 'create') return;
+    const nowIso = new Date().toISOString();
+
+    const hasReported = fields.some(isReportedDateTimeField);
+    const hasReportedBy = fields.some(isReportedByStaffField);
+
+    setFormData((prev) => {
+      const next = { ...prev };
+      if (hasReported && !next['GLB-002']) next['GLB-002'] = nowIso;
+
+      if (hasReportedBy && !next['GLB-005']) {
+        const first = String((user as any)?.firstName ?? '').trim();
+        const last = String((user as any)?.lastName ?? '').trim();
+        const name = `${first} ${last}`.trim();
+        next['GLB-005'] = name || String((user as any)?.email ?? '').trim() || String((user as any)?.id ?? '').trim();
+      }
+
+      // Default Priority to Medium if present but unset
+      if (fields.some((f) => f.id === 'GLB-010') && !next['GLB-010']) {
+        next['GLB-010'] = 'Medium (48hrs)';
+      }
+
+      return next;
+    });
+  }, [fields, mode, user]);
+
+  const fieldsById = useMemo(() => new Map(fields.map((f) => [f.id, f])), [fields]);
+  const shouldShowClientSection = useMemo(() => {
+    const clientFields = fields.filter((f) => CLIENT_FIELD_IDS.has(f.id) && !f.isHidden);
+    if (clientFields.length === 0) return false;
+    if (clientFields.some((f) => isEffectivelyRequired(f))) return true;
+    return includeClientDetails;
+  }, [fields, includeClientDetails]);
+
+  // Keep hidden fields excluded, but allow auto fields to show as read-only so the
+  // form matches the required structure (Ticket ID, Date & Time Reported).
+  const visibleFields = fields.filter((field) => !field.isHidden);
+
+  // Follow-ups (stored in formData as a lightweight array; saved in ticket.formData)
+  type FollowUpItem = { date: string; reason: string };
+  const hasFollowUpRequired = Boolean((formData as any)['GLB-015'] === true || (formData as any)['GLB-015'] === 'true');
+  const getFollowUps = (): FollowUpItem[] => {
+    const raw = (formData as any).__followUps;
+    if (!Array.isArray(raw)) return [];
+    return raw.map((x: any) => ({ date: String(x?.date ?? ''), reason: String(x?.reason ?? '') }));
+  };
+  const setFollowUps = (items: FollowUpItem[]) => {
+    setFormData((prev) => ({
+      ...prev,
+      __followUps: items,
+    }));
+  };
+
+  // Momence (via server proxy endpoints to keep secrets off the client)
+  type MomenceCustomer = {
+    id: string;
+    firstName?: string;
+    lastName?: string;
+    email?: string;
+    phoneNumber?: string;
+    phone?: string;
+  };
+
+  type MomenceSession = {
+    id: string;
+    name?: string;
+    startsAt?: string;
+    endsAt?: string;
+    teacher?: { firstName?: string; lastName?: string };
+    capacity?: number;
+    spots?: number;
+    maxCapacity?: number;
+    booked?: number;
+    bookedCount?: number;
+    signups?: number;
+    signupsCount?: number;
+    spotsAvailable?: number;
+    availableSpots?: number;
+    [key: string]: any;
+  };
+
+  const toDateOnly = (isoLike: unknown): string => {
+    const raw = String(isoLike ?? '').trim();
+    if (!raw) return '';
+    const d = new Date(raw);
+    if (Number.isNaN(d.getTime())) return '';
+    // YYYY-MM-DD (input[type=date] compatible)
+    return d.toISOString().slice(0, 10);
+  };
+
+  const toDisplayDate = (isoLike: unknown): string => {
+    const raw = String(isoLike ?? '').trim();
+    if (!raw) return '';
+    const d = new Date(raw);
+    if (Number.isNaN(d.getTime())) return '';
+    // DD-MM-YYYY (stable for ISO timestamps)
+    const dd = String(d.getUTCDate()).padStart(2, '0');
+    const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
+    const yyyy = String(d.getUTCFullYear());
+    return `${dd}-${mm}-${yyyy}`;
+  };
+
+  const toLocalDayAndTime = (isoLike: unknown): { day: string; time: string } => {
+    const raw = String(isoLike ?? '').trim();
+    if (!raw) return { day: '', time: '' };
+    const d = new Date(raw);
+    if (Number.isNaN(d.getTime())) return { day: '', time: '' };
+
+    const day = d.toLocaleDateString(undefined, { weekday: 'short' });
+    const time = d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+    return { day, time };
+  };
+
+  const asNumberOrNull = (value: unknown): number | null => {
+    if (value === null || value === undefined) return null;
+    if (typeof value === 'number' && Number.isFinite(value)) return value;
+    const n = Number(String(value).trim());
+    return Number.isFinite(n) ? n : null;
+  };
+
+  const getSessionCounts = (session: MomenceSession | null | undefined) => {
+    if (!session) return { booked: null as number | null, capacity: null as number | null, available: null as number | null };
+
+    const booked =
+      asNumberOrNull((session as any).bookedCount) ??
+      asNumberOrNull((session as any).booked) ??
+      asNumberOrNull((session as any).signupsCount) ??
+      asNumberOrNull((session as any).signups) ??
+      asNumberOrNull((session as any).attendees) ??
+      null;
+
+    const capacity =
+      asNumberOrNull((session as any).capacity) ??
+      asNumberOrNull((session as any).maxCapacity) ??
+      asNumberOrNull((session as any).spots) ??
+      asNumberOrNull((session as any).maxSpots) ??
+      null;
+
+    const available =
+      asNumberOrNull((session as any).spotsAvailable) ??
+      asNumberOrNull((session as any).availableSpots) ??
+      (booked !== null && capacity !== null ? Math.max(0, capacity - booked) : null);
+
+    return { booked, capacity, available };
+  };
+
+  const setByLabelIncludes = (next: Record<string, any>, labelNeedle: string, value: any) => {
+    const needle = labelNeedle.trim().toLowerCase();
+    if (!needle) return;
+
+    const field = visibleFields.find((f) => String(f.label || '').toLowerCase().includes(needle));
+    if (!field) return;
+
+    next[field.id] = value;
+  };
+
+  const setDateByLabelIncludes = (next: Record<string, any>, labelNeedle: string, isoLike: unknown) => {
+    const needle = labelNeedle.trim().toLowerCase();
+    if (!needle) return;
+    const field = visibleFields.find((f) => String(f.label || '').toLowerCase().includes(needle));
+    if (!field) return;
+
+    // If the template field is a Date type, keep it input-compatible.
+    // Otherwise store a human-friendly DD-MM-YYYY string.
+    next[field.id] = field.fieldType === 'Date' ? toDateOnly(isoLike) : toDisplayDate(isoLike);
+  };
+
+  const [customerSearchQuery, setCustomerSearchQuery] = useState('');
+  const [customerSearchDebounced, setCustomerSearchDebounced] = useState('');
+  const [customerSearchOpen, setCustomerSearchOpen] = useState(false);
+
+  useEffect(() => {
+    const t = setTimeout(() => setCustomerSearchDebounced(customerSearchQuery.trim()), 300);
+    return () => clearTimeout(t);
+  }, [customerSearchQuery]);
+
+  const { data: momenceCustomerSearch } = useQuery<{ enabled: boolean; results: MomenceCustomer[] }>({
+    queryKey: ['/api/momence/customers/search', customerSearchDebounced],
+    enabled: customerSearchOpen && customerSearchDebounced.length >= 2,
+    queryFn: async () => {
+      const res = await apiRequest('GET', `/api/momence/customers/search?query=${encodeURIComponent(customerSearchDebounced)}`);
+      return (await res.json()) as { enabled: boolean; results: MomenceCustomer[] };
+    },
+    staleTime: 10_000,
+  });
+
+  const selectCustomer = async (customer: MomenceCustomer) => {
+    setCustomerSearchOpen(false);
+    setCustomerSearchQuery('');
+    setIncludeClientDetails(true);
+
+    const res = await apiRequest('GET', `/api/momence/customers/${encodeURIComponent(customer.id)}`);
+    const data = (await res.json()) as any;
+    const full = data?.customer ?? customer;
+
+    const firstName = String(full?.firstName ?? customer.firstName ?? '').trim();
+    const lastName = String(full?.lastName ?? customer.lastName ?? '').trim();
+    const name = `${firstName} ${lastName}`.trim() || String(full?.email ?? customer.email ?? '').trim() || 'Unknown Customer';
+    const email = String(full?.email ?? customer.email ?? '').trim();
+    const phone = String(full?.phoneNumber ?? full?.phone ?? customer.phoneNumber ?? customer.phone ?? '').trim();
+
+    const visits = (full as any)?.visits ?? {};
+    const totalVisits =
+      asNumberOrNull(visits.totalVisits) ??
+      asNumberOrNull(visits.total) ??
+      asNumberOrNull(visits.total_visits) ??
+      null;
+
+    const totalBookings =
+      asNumberOrNull(visits.bookings) ??
+      asNumberOrNull(visits.bookingsVisits) ??
+      asNumberOrNull(visits.bookings_visits) ??
+      null;
+
+    const totalCancellations =
+      asNumberOrNull((full as any)?.totalCancellations) ??
+      asNumberOrNull((full as any)?.cancellations) ??
+      asNumberOrNull(visits.cancellations) ??
+      null;
+
+    const firstVisitDateIso = String((full as any)?.firstSeen ?? (full as any)?.first_seen ?? '').trim();
+    const lastVisitDateIso = String((full as any)?.lastSeen ?? (full as any)?.last_seen ?? '').trim();
+
+    const activeMemberships = (() => {
+      const candidates = [
+        (full as any)?.activeMemberships,
+        (full as any)?.memberships,
+        (full as any)?.membershipPlans,
+        (full as any)?.activeMembershipPlans,
+        (full as any)?.memberMemberships,
+      ];
+
+      const raw = candidates.find((x) => Array.isArray(x));
+      if (!Array.isArray(raw)) return [] as string[];
+
+      const names: string[] = [];
+      for (const m of raw) {
+        const status = String(m?.status ?? '').toLowerCase();
+        const isActive =
+          m?.isActive === true ||
+          m?.active === true ||
+          status.includes('active') ||
+          status.includes('current') ||
+          status.includes('paid');
+        if (status && !isActive) continue;
+
+        const n =
+          String(m?.name ?? m?.planName ?? m?.membershipName ?? m?.title ?? m?.type ?? '').trim() ||
+          String(m?.plan?.name ?? m?.membership?.name ?? '').trim();
+        if (n) names.push(n);
+      }
+      return Array.from(new Set(names)).slice(0, 10);
+    })();
+
+    const recentSessionsBooked = (() => {
+      const candidates = [
+        (full as any)?.recentSessionsBooked,
+        (full as any)?.recentSessions,
+        (full as any)?.recentBookings,
+        (full as any)?.bookings,
+        (full as any)?.sessions,
+        (full as any)?.classes,
+        (visits as any)?.recentSessions,
+        (visits as any)?.recentBookings,
+      ];
+      const raw = candidates.find((x) => Array.isArray(x));
+      if (!Array.isArray(raw)) return [] as Array<{ name: string; startsAt?: string }>;
+
+      const out: Array<{ name: string; startsAt?: string }> = [];
+      for (const s of raw) {
+        const n = String(s?.name ?? s?.sessionName ?? s?.className ?? s?.eventName ?? s?.title ?? '').trim();
+        const startsAt = String(s?.startsAt ?? s?.startTime ?? s?.date ?? s?.starts_at ?? s?.start_time ?? '').trim() || undefined;
+        if (!n && !startsAt) continue;
+        out.push({ name: n || 'Session', startsAt });
+      }
+      return out.slice(0, 5);
+    })();
+
+    const customerFieldsArr = Array.isArray((full as any)?.customerFields) ? (full as any).customerFields : [];
+    const customerFieldsMap = new Map<string, string>();
+    for (const cf of customerFieldsArr) {
+      const label = String(cf?.label ?? '').trim();
+      if (!label) continue;
+      const v = String(cf?.value ?? '').trim();
+      if (!v) continue;
+      customerFieldsMap.set(label.toLowerCase(), v);
+    }
+
+    const getCustomerFieldValue = (...needles: string[]) => {
+      for (const needle of needles) {
+        const v = customerFieldsMap.get(String(needle).trim().toLowerCase());
+        if (v) return v;
+      }
+      // fallback: fuzzy contains
+      for (const needle of needles) {
+        const n = String(needle).trim().toLowerCase();
+        if (!n) continue;
+        let match = '';
+        customerFieldsMap.forEach((v, k) => {
+          if (!match && k.includes(n) && v) match = v;
+        });
+        if (match) return match;
+      }
+      return '';
+    };
+
+    const goals = getCustomerFieldValue('fitness goal', 'goal', 'goals');
+    const medical = getCustomerFieldValue('medical history', 'medical', 'injury', 'health');
+    const homeLocation =
+      String((full as any)?.homeLocation?.name ?? (full as any)?.homeLocation ?? (full as any)?.location?.name ?? (full as any)?.location ?? '').trim();
+
+    setFormData((prev) => {
+      const next = { ...(prev as any) };
+      next['GLB-006'] = name;
+      next['GLB-007'] = email;
+      next['GLB-008'] = phone;
+      next.momenceCustomerId = String(customer.id);
+
+      next.momenceCustomerSummary = {
+        name,
+        email,
+        phone,
+        totalVisits,
+        totalBookings,
+        totalCancellations,
+        firstVisitDate: firstVisitDateIso,
+        lastVisitDate: lastVisitDateIso,
+        homeLocation,
+        medical,
+        goals,
+        activeMemberships,
+        recentSessionsBooked,
+      };
+
+      // Best-effort autofill of any matching template fields.
+      setByLabelIncludes(next, 'total visits', totalVisits ?? '');
+      setByLabelIncludes(next, 'total bookings', totalBookings ?? '');
+      setByLabelIncludes(next, 'total cancellations', totalCancellations ?? '');
+      setDateByLabelIncludes(next, 'first visit date', firstVisitDateIso);
+      setDateByLabelIncludes(next, 'last visit date', lastVisitDateIso);
+      setByLabelIncludes(next, 'home location', homeLocation);
+      setByLabelIncludes(next, 'medical', medical);
+      setByLabelIncludes(next, 'health', medical);
+      setByLabelIncludes(next, 'goal', goals);
+
+      if (activeMemberships.length) {
+        setByLabelIncludes(next, 'active membership', activeMemberships.join(', '));
+        setByLabelIncludes(next, 'active memberships', activeMemberships.join(', '));
+        setByLabelIncludes(next, 'membership', activeMemberships.join(', '));
+      }
+
+      if (recentSessionsBooked.length) {
+        const lines = recentSessionsBooked
+          .map((s) => {
+            const d = s.startsAt ? toDisplayDate(s.startsAt) : '';
+            return d ? `${s.name} (${d})` : s.name;
+          })
+          .join('\n');
+        setByLabelIncludes(next, 'recent sessions', lines);
+        setByLabelIncludes(next, 'recent classes', lines);
+        setByLabelIncludes(next, 'recent bookings', lines);
+      }
+
+      return next;
+    });
+  };
+
+  const [sessionSearchQuery, setSessionSearchQuery] = useState('');
+  const [sessionSearchDebounced, setSessionSearchDebounced] = useState('');
+  const [sessionSearchOpen, setSessionSearchOpen] = useState(false);
+
+  useEffect(() => {
+    const t = setTimeout(() => setSessionSearchDebounced(sessionSearchQuery.trim()), 300);
+    return () => clearTimeout(t);
+  }, [sessionSearchQuery]);
+
+  const { data: momenceSessionSearch } = useQuery<{ enabled: boolean; results: MomenceSession[] }>({
+    queryKey: ['/api/momence/sessions/search', sessionSearchDebounced],
+    enabled: sessionSearchOpen && sessionSearchDebounced.length >= 2,
+    queryFn: async () => {
+      const res = await apiRequest('GET', `/api/momence/sessions/search?query=${encodeURIComponent(sessionSearchDebounced)}`);
+      return (await res.json()) as { enabled: boolean; results: MomenceSession[] };
+    },
+    staleTime: 10_000,
+  });
+
+  const selectSession = async (session: MomenceSession) => {
+    setSessionSearchOpen(false);
+    setSessionSearchQuery('');
+
+    let full: MomenceSession | null = null;
+    try {
+      const res = await apiRequest('GET', `/api/momence/sessions/${encodeURIComponent(session.id)}`);
+      const data = (await res.json()) as any;
+      full = (data?.session ?? null) as MomenceSession | null;
+    } catch {
+      full = null;
+    }
+
+  const merged = ({ ...(session as any), ...((full ?? {}) as any) } as any) as MomenceSession;
+
+    const teacher = merged.teacher ? `${merged.teacher.firstName || ''} ${merged.teacher.lastName || ''}`.trim() : '';
+    const { day, time } = toLocalDayAndTime(merged.startsAt);
+    const counts = getSessionCounts(merged);
+
+    const detailsParts = [
+      merged.name,
+      day && time ? `${day} ${time}` : null,
+      teacher ? `Teacher: ${teacher}` : null,
+      counts.booked !== null && counts.capacity !== null ? `Signups: ${counts.booked}/${counts.capacity}` : null,
+      counts.available !== null ? `Available: ${counts.available}` : null,
+    ].filter(Boolean);
+    const details = detailsParts.join(' — ');
+
+    setFormData((prev) => {
+      const next = { ...(prev as any) };
+
+      // Class date/time fields
+      const classDateTimeField = visibleFields.find((f) => f.id === 'GLB-003');
+      if (classDateTimeField && !next[classDateTimeField.id] && merged.startsAt) {
+        next[classDateTimeField.id] = merged.startsAt;
+      }
+
+      // Best-effort fill common class fields if present.
+      setByLabelIncludes(next, 'class date', toDateOnly(merged.startsAt));
+      setByLabelIncludes(next, 'class time', time);
+      setByLabelIncludes(next, 'time slot', time);
+      setByLabelIncludes(next, 'teacher', teacher);
+      setByLabelIncludes(next, 'instructor', teacher);
+      setByLabelIncludes(next, 'trainer', teacher);
+      setByLabelIncludes(next, 'signups', counts.booked !== null ? String(counts.booked) : '');
+      setByLabelIncludes(next, 'spots available', counts.available !== null ? String(counts.available) : '');
+      setByLabelIncludes(next, 'capacity', counts.capacity !== null ? String(counts.capacity) : '');
+
+      const classDetailsField = visibleFields.find((f) => String(f.label || '').toLowerCase().includes('class details') || f.id === 'Class Details');
+      if (classDetailsField) {
+        next[classDetailsField.id] = details;
+      }
+
+      const classTypeField = visibleFields.find((f) => f.label.toLowerCase() === 'class type' || f.label.toLowerCase() === 'class');
+      if (classTypeField && merged.name) {
+        next[classTypeField.id] = merged.name;
+      }
+
+      next.momenceSessionId = String(merged.id);
+      next.momenceSessionSummary = {
+        id: String(merged.id),
+        name: merged.name || '',
+        startsAt: merged.startsAt || '',
+        endsAt: merged.endsAt || '',
+        day,
+        time,
+        teacher,
+        booked: counts.booked,
+        capacity: counts.capacity,
+        available: counts.available,
+      };
+
+      return next;
+    });
+  };
+
+  const getSectionKey = (field: FieldDefinition): string => {
+    const label = field.label.trim().toLowerCase();
+
+    if (isTicketIdField(field) || isReportedDateTimeField(field) || field.id === 'GLB-010' || label === 'priority' || label === 'issue type' || field.id === 'GLB-011' || label.includes('department routing') || label.includes('assigned to') || label === 'status') {
+      return 'global';
+    }
+
+    if (field.id === 'GLB-012' || label.includes('issue description') || label === 'check-in issue type' || label === 'check-in issue') {
+      return 'issue_details';
+    }
+
+    if (isReportedByStaffField(field) || CLIENT_FIELD_IDS.has(field.id) || label.includes('client ')) {
+      return 'reporter_client';
+    }
+
+    if (field.id === 'GLB-003' || label.includes('incident') || label.includes('class date') || label.includes('class details') || label === 'class type') {
+      return 'timeline';
+    }
+
+    if (field.id === 'GLB-004' || label === 'location') {
+      return 'location';
+    }
+
+    if (label.includes('attendance') || label.includes('checked in') || label.includes('check-in') || label.includes('instructor') || label.includes('trainer') || label.includes('credits') || label === 'class') {
+      return 'operational';
+    }
+
+    if (field.id === 'GLB-013' || field.id === 'GLB-015' || label.includes('follow-up') || label === 'result' || label.includes('action taken')) {
+      return 'actions';
+    }
+
+    if (field.id === 'GLB-016' || field.fieldType === 'File Upload' || label.includes('attachment') || label.includes('upload')) {
+      return 'attachments';
+    }
+
+    // Default bucket
+    return 'issue_details';
+  };
+
+  const SECTION_ORDER: Array<{ key: string; title: string; description?: string }> = [
+    { key: 'global', title: 'Global Ticket Information' },
+    { key: 'issue_details', title: 'Issue Details' },
+    { key: 'reporter_client', title: 'Reporter & Client Information' },
+    { key: 'timeline', title: 'Incident & Class Timeline' },
+    { key: 'location', title: 'Location' },
+    { key: 'operational', title: 'Operational Context' },
+    { key: 'actions', title: 'Actions & Resolution' },
+    { key: 'attachments', title: 'Attachments' },
+  ];
+
+  const ORDER_WITHIN_SECTION: Record<string, string[]> = {
+    global: ['GLB-001', 'GLB-002', 'GLB-010', 'Issue Type', 'GLB-011', 'Assigned To', 'Status'],
+    issue_details: ['GLB-012', 'Check-in Issue Type', 'Check-in Issue'],
+    reporter_client: ['GLB-005', 'GLB-006', 'GLB-007', 'GLB-008', 'GLB-009', 'GLB-014'],
+    timeline: ['GLB-003', 'Class Date & Time', 'Class Details', 'Class Type'],
+    location: ['GLB-004'],
+    actions: ['GLB-013', 'GLB-015', 'Result'],
+    attachments: ['GLB-016'],
+  };
+
+  const sectioned = useMemo(() => {
+    // If DB-backed groups are provided, use them as the source of truth for dynamic headers.
+    if (Array.isArray(fieldGroups) && fieldGroups.length > 0) {
+      const normalizeIds = (raw: any): string[] => {
+        if (!raw) return [];
+        if (Array.isArray(raw)) return raw.map((x) => String(x));
+        if (Array.isArray(raw.fieldIds)) return raw.fieldIds.map((x: any) => String(x));
+        return [];
+      };
+
+      const byId = new Map(visibleFields.map((f) => [f.id, f] as const));
+      return [...fieldGroups]
+        .sort((a, b) => (a.orderIndex ?? 0) - (b.orderIndex ?? 0))
+        .map((g) => {
+          const ids = normalizeIds((g as any).fieldIds);
+          const groupFields = ids.map((id) => byId.get(id)).filter(Boolean) as FieldDefinition[];
+
+          // Apply client section hiding even when using groups
+          const filtered = groupFields.filter((f) => {
+            if (isClientField(f) && !shouldShowClientSection) return false;
+            return true;
+          });
+
+          return {
+            key: g.id,
+            title: g.name,
+            fields: filtered,
+          };
+        })
+        .filter((g) => g.fields.length > 0);
+    }
+
+    const bySection = new Map<string, FieldDefinition[]>();
+    for (const f of visibleFields) {
+      // Conditional client section rendering
+      if (CLIENT_FIELD_IDS.has(f.id) && !shouldShowClientSection) continue;
+
+      const key = getSectionKey(f);
+      const list = bySection.get(key) ?? [];
+      list.push(f);
+      bySection.set(key, list);
+    }
+
+    for (const [key, list] of Array.from(bySection.entries())) {
+      const order = ORDER_WITHIN_SECTION[key] ?? [];
+      const normalize = (s: string) => s.trim().toLowerCase();
+      const idToRank = new Map(order.map((x, idx) => [normalize(x), idx]));
+
+      list.sort((a: FieldDefinition, b: FieldDefinition) => {
+        const aRank = idToRank.get(normalize(a.id)) ?? idToRank.get(normalize(a.label)) ?? 9999;
+        const bRank = idToRank.get(normalize(b.id)) ?? idToRank.get(normalize(b.label)) ?? 9999;
+        if (aRank !== bRank) return aRank - bRank;
+        return a.label.localeCompare(b.label, undefined, { sensitivity: 'base' });
+      });
+    }
+
+    return SECTION_ORDER.map((s) => {
+      const dynamicTitle =
+        s.key === 'issue_details' && context?.subCategoryName
+          ? `${s.title} — ${context.subCategoryName}`
+          : s.title;
+      return {
+        ...s,
+        title: dynamicTitle,
+        fields: bySection.get(s.key) ?? [],
+      };
+    }).filter((s) => s.fields.length > 0);
+  }, [SECTION_ORDER, visibleFields, shouldShowClientSection, fieldGroups, context?.subCategoryName]);
 
   const validateField = (field: FieldDefinition, value: any): string | null => {
-    if (field.isRequired && (!value || value === '')) {
-      return `${field.label} is required`;
+    // Skip required validation for read-only/auto fields in create mode
+    if (!isFieldEditable(field)) {
+      return null;
+    }
+
+    const isMultiCheckboxField = (f: FieldDefinition): boolean => {
+      if (f.fieldType !== 'Checkbox') return false;
+      const opts = (f.options ?? []).map((o) => String(o).trim()).filter(Boolean);
+      if (opts.length <= 1) return false;
+      // Treat typical Yes/No as boolean checkbox, not multi-select
+      if (opts.length === 1) return false;
+      if (opts.some((o) => o.toLowerCase() === 'yes/no')) return false;
+      return true;
+    };
+
+    if (isEffectivelyRequired(field)) {
+      if (field.fieldType === 'Checkbox') {
+        if (isMultiCheckboxField(field)) {
+          if (!Array.isArray(value) || value.length === 0) return `${field.label} is required`;
+        } else {
+          const checked = value === true || value === 'true';
+          if (!checked) return `${field.label} is required`;
+        }
+      } else if (value === null || value === undefined) {
+        return `${field.label} is required`;
+      } else if (typeof value === 'string' && value.trim() === '') {
+        return `${field.label} is required`;
+      }
     }
 
     const toNumber = (v: unknown): number | null => {
@@ -108,6 +830,7 @@ export const DynamicForm: React.FC<DynamicFormProps> = ({
     const newErrors: Record<string, string> = {};
 
     for (const field of visibleFields) {
+      if (!isFieldEditable(field)) continue;
       const error = validateField(field, formData[field.id]);
       if (error) {
         newErrors[field.id] = error;
@@ -126,17 +849,69 @@ export const DynamicForm: React.FC<DynamicFormProps> = ({
   };
 
   const renderField = (field: FieldDefinition) => {
-    const value = formData[field.id] || '';
+    const value = formData[field.id] ?? '';
     const error = errors[field.id];
+
+    const disabled = !isFieldEditable(field);
 
     const fieldProps = {
       id: field.id,
-      value,
-      onChange: (newValue: any) => handleFieldChange(field.id, newValue),
-      error: error,
-      required: field.isRequired,
       placeholder: field.description,
-      'data-testid': `field-${field.id}`
+      'data-testid': `field-${field.id}`,
+    };
+
+    const renderLabel = () => (
+      <Label htmlFor={field.id} className={`text-sm font-medium ${disabled ? 'text-muted-foreground' : ''}`}>
+        {field.label}
+        {isEffectivelyRequired(field) && <span className="text-red-500 ml-1">*</span>}
+      </Label>
+    );
+
+    const toDateTimeLocal = (iso: string): string => {
+      if (!iso) return '';
+      const d = new Date(iso);
+      if (Number.isNaN(d.getTime())) return '';
+      const pad = (n: number) => String(n).padStart(2, '0');
+      const yyyy = d.getFullYear();
+      const mm = pad(d.getMonth() + 1);
+      const dd = pad(d.getDate());
+      const hh = pad(d.getHours());
+      const min = pad(d.getMinutes());
+      return `${yyyy}-${mm}-${dd}T${hh}:${min}`;
+    };
+
+    const toDateLocal = (input: string): string => {
+      if (!input) return '';
+      // Accept either YYYY-MM-DD or ISO; normalize to YYYY-MM-DD
+      if (/^\d{4}-\d{2}-\d{2}$/.test(input)) return input;
+      const d = new Date(input);
+      if (Number.isNaN(d.getTime())) return '';
+      const pad = (n: number) => String(n).padStart(2, '0');
+      const yyyy = d.getFullYear();
+      const mm = pad(d.getMonth() + 1);
+      const dd = pad(d.getDate());
+      return `${yyyy}-${mm}-${dd}`;
+    };
+
+    const fromDateTimeLocal = (localValue: string): string => {
+      if (!localValue) return '';
+      const d = new Date(localValue);
+      if (Number.isNaN(d.getTime())) return '';
+      return d.toISOString();
+    };
+
+    const fromDateLocal = (localValue: string): string => {
+      if (!localValue) return '';
+      // Store date-only values as YYYY-MM-DD
+      return localValue;
+    };
+
+    const isMultiCheckboxField = (f: FieldDefinition): boolean => {
+      if (f.fieldType !== 'Checkbox') return false;
+      const opts = (f.options ?? []).map((o) => String(o).trim()).filter(Boolean);
+      if (opts.length <= 1) return false;
+      if (opts.some((o) => o.toLowerCase() === 'yes/no')) return false;
+      return true;
     };
 
     switch (field.fieldType) {
@@ -144,18 +919,18 @@ export const DynamicForm: React.FC<DynamicFormProps> = ({
       case 'Email':
       case 'Phone':
         return (
-          <div key={field.id} className="space-y-2">
-            <Label htmlFor={field.id} className="text-sm font-medium">
-              {field.label}
-              {field.isRequired && <span className="text-red-500 ml-1">*</span>}
-            </Label>
+          <div key={field.id} className={`space-y-2 rounded-lg border bg-background/60 p-4 transition-colors focus-within:border-primary/50 focus-within:ring-1 focus-within:ring-primary/20 ${getFieldSpanClass(field)}`}>
+            {renderLabel()}
             <Input
               {...fieldProps}
               type={field.fieldType === 'Email' ? 'email' : field.fieldType === 'Phone' ? 'tel' : 'text'}
+              value={typeof value === 'string' || typeof value === 'number' ? String(value) : ''}
+              onChange={(e) => handleFieldChange(field.id, e.target.value)}
               className={error ? 'border-red-500' : ''}
+              disabled={disabled}
             />
             {field.description && (
-              <p className="text-xs text-gray-600">{field.description}</p>
+              <p className="text-xs text-muted-foreground">{field.description}</p>
             )}
             {error && <p className="text-xs text-red-500">{error}</p>}
           </div>
@@ -163,18 +938,18 @@ export const DynamicForm: React.FC<DynamicFormProps> = ({
 
       case 'Long Text':
         return (
-          <div key={field.id} className="space-y-2">
-            <Label htmlFor={field.id} className="text-sm font-medium">
-              {field.label}
-              {field.isRequired && <span className="text-red-500 ml-1">*</span>}
-            </Label>
+          <div key={field.id} className={`space-y-2 rounded-lg border bg-background/60 p-4 transition-colors focus-within:border-primary/50 focus-within:ring-1 focus-within:ring-primary/20 ${getFieldSpanClass(field)}`}>
+            {renderLabel()}
             <Textarea
               {...fieldProps}
+              value={typeof value === 'string' || typeof value === 'number' ? String(value) : ''}
+              onChange={(e) => handleFieldChange(field.id, e.target.value)}
               rows={4}
               className={error ? 'border-red-500' : ''}
+              disabled={disabled}
             />
             {field.description && (
-              <p className="text-xs text-gray-600">{field.description}</p>
+              <p className="text-xs text-muted-foreground">{field.description}</p>
             )}
             {error && <p className="text-xs text-red-500">{error}</p>}
           </div>
@@ -182,105 +957,178 @@ export const DynamicForm: React.FC<DynamicFormProps> = ({
 
       case 'Number':
         return (
-          <div key={field.id} className="space-y-2">
-            <Label htmlFor={field.id} className="text-sm font-medium">
-              {field.label}
-              {field.isRequired && <span className="text-red-500 ml-1">*</span>}
-            </Label>
+          <div key={field.id} className={`space-y-2 rounded-lg border bg-background/60 p-4 transition-colors focus-within:border-primary/50 focus-within:ring-1 focus-within:ring-primary/20 ${getFieldSpanClass(field)}`}>
+            {renderLabel()}
             <Input
               {...fieldProps}
               type="number"
+              value={typeof value === 'string' || typeof value === 'number' ? String(value) : ''}
+              onChange={(e) => handleFieldChange(field.id, e.target.value)}
               className={error ? 'border-red-500' : ''}
+              disabled={disabled}
             />
             {field.description && (
-              <p className="text-xs text-gray-600">{field.description}</p>
+              <p className="text-xs text-muted-foreground">{field.description}</p>
             )}
             {error && <p className="text-xs text-red-500">{error}</p>}
           </div>
         );
 
       case 'Dropdown':
+        {
+          const options = isReportedByStaffField(field)
+            ? (staffOptions.length > 0 ? staffOptions : field.options ?? [])
+            : (field.options ?? []);
         return (
-          <div key={field.id} className="space-y-2">
-            <Label htmlFor={field.id} className="text-sm font-medium">
-              {field.label}
-              {field.isRequired && <span className="text-red-500 ml-1">*</span>}
-            </Label>
+          <div key={field.id} className={`space-y-2 rounded-lg border bg-background/60 p-4 transition-colors focus-within:border-primary/50 focus-within:ring-1 focus-within:ring-primary/20 ${getFieldSpanClass(field)}`}>
+            {renderLabel()}
             <Select
               value={value}
               onValueChange={(newValue) => handleFieldChange(field.id, newValue)}
+              disabled={disabled}
             >
               <SelectTrigger className={error ? 'border-red-500' : ''}>
                 <SelectValue placeholder={`Select ${field.label}`} />
               </SelectTrigger>
               <SelectContent>
-                {field.options?.map((option, index) => (
-                  <SelectItem key={index} value={option}>
-                    {option}
-                  </SelectItem>
-                ))}
+                {isAssignedToField(field) ? (
+                  <>
+                    <SelectItem value="__UNASSIGNED__">Unassigned</SelectItem>
+                    {staffUsers
+                      .map((u) => {
+                        const id = String(u?.id ?? '').trim();
+                        if (!id) return null;
+                        const first = String(u?.firstName ?? '').trim();
+                        const last = String(u?.lastName ?? '').trim();
+                        const name = `${first} ${last}`.trim();
+                        const label = name || String(u?.email ?? '').trim() || id;
+                        return { id, label };
+                      })
+                      .filter(Boolean)
+                      .map((u: any) => (
+                        <SelectItem key={u.id} value={u.id}>
+                          {u.label}
+                        </SelectItem>
+                      ))}
+                  </>
+                ) : isStatusField(field) ? (
+                  <>
+                    {['Open', 'In Progress', 'Pending', 'Resolved', 'Closed', 'Escalated'].map((s) => (
+                      <SelectItem key={s} value={s}>
+                        {s}
+                      </SelectItem>
+                    ))}
+                  </>
+                ) : (
+                  <>
+                    {options.map((option, index) => (
+                      <SelectItem key={index} value={option}>
+                        {option}
+                      </SelectItem>
+                    ))}
+                  </>
+                )}
               </SelectContent>
             </Select>
             {field.description && (
-              <p className="text-xs text-gray-600">{field.description}</p>
+              <p className="text-xs text-muted-foreground">{field.description}</p>
             )}
             {error && <p className="text-xs text-red-500">{error}</p>}
           </div>
         );
+        }
 
       case 'Checkbox':
+        if (isMultiCheckboxField(field)) {
+          const selected: string[] = Array.isArray(value) ? value.map((v: any) => String(v)) : [];
+          const opts = (field.options ?? []).map((o) => String(o)).filter(Boolean);
+          return (
+            <div key={field.id} className={`space-y-2 rounded-lg border bg-background/60 p-4 transition-colors focus-within:border-primary/50 focus-within:ring-1 focus-within:ring-primary/20 ${getFieldSpanClass(field)}`}>
+              {renderLabel()}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {opts.map((opt) => {
+                  const cid = `${field.id}__${opt}`;
+                  const checked = selected.includes(opt);
+                  return (
+                    <div key={cid} className="flex items-center gap-2 rounded-md border bg-muted/20 px-3 py-2">
+                      <Checkbox
+                        id={cid}
+                        checked={checked}
+                        onCheckedChange={(nextChecked) => {
+                          const next = new Set(selected);
+                          if (nextChecked) next.add(opt);
+                          else next.delete(opt);
+                          handleFieldChange(field.id, Array.from(next));
+                        }}
+                        disabled={disabled}
+                      />
+                      <Label htmlFor={cid} className="text-sm">
+                        {opt}
+                      </Label>
+                    </div>
+                  );
+                })}
+              </div>
+              {field.description && <p className="text-xs text-muted-foreground">{field.description}</p>}
+              {error && <p className="text-xs text-red-500">{error}</p>}
+            </div>
+          );
+        }
+
         return (
-          <div key={field.id} className="space-y-2">
+          <div key={field.id} className={`space-y-2 rounded-lg border bg-background/60 p-4 transition-colors focus-within:border-primary/50 focus-within:ring-1 focus-within:ring-primary/20 ${getFieldSpanClass(field)}`}>
             <div className="flex items-center space-x-2">
               <Checkbox
                 id={field.id}
                 checked={value === true || value === 'true'}
                 onCheckedChange={(checked) => handleFieldChange(field.id, checked)}
+                disabled={disabled}
               />
               <Label htmlFor={field.id} className="text-sm font-medium">
                 {field.label}
-                {field.isRequired && <span className="text-red-500 ml-1">*</span>}
+                {isEffectivelyRequired(field) && <span className="text-red-500 ml-1">*</span>}
               </Label>
             </div>
             {field.description && (
-              <p className="text-xs text-gray-600 ml-6">{field.description}</p>
+              <p className="text-xs text-muted-foreground ml-6">{field.description}</p>
             )}
             {error && <p className="text-xs text-red-500 ml-6">{error}</p>}
           </div>
         );
 
+      case 'Date':
+        return (
+          <div key={field.id} className={`space-y-2 rounded-lg border bg-background/60 p-4 transition-colors focus-within:border-primary/50 focus-within:ring-1 focus-within:ring-primary/20 ${getFieldSpanClass(field)}`}>
+            {renderLabel()}
+            <Input
+              id={field.id}
+              type="date"
+              value={typeof value === 'string' ? toDateLocal(value) : ''}
+              onChange={(e) => handleFieldChange(field.id, fromDateLocal(e.target.value))}
+              className={error ? 'border-red-500' : ''}
+              disabled={disabled}
+            />
+            {field.description && (
+              <p className="text-xs text-muted-foreground">{field.description}</p>
+            )}
+            {error && <p className="text-xs text-red-500">{error}</p>}
+          </div>
+        );
+
       case 'DateTime':
         return (
-          <div key={field.id} className="space-y-2">
-            <Label htmlFor={field.id} className="text-sm font-medium">
-              {field.label}
-              {field.isRequired && <span className="text-red-500 ml-1">*</span>}
-            </Label>
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button
-                  variant="outline"
-                  className={`w-full justify-start text-left font-normal ${error ? 'border-red-500' : ''}`}
-                >
-                  <CalendarIcon className="mr-2 h-4 w-4" />
-                  {value ? format(new Date(value), 'PPP p') : 'Select date and time'}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0">
-                <Calendar
-                  mode="single"
-                  selected={value ? new Date(value) : undefined}
-                  onSelect={(date) => {
-                    if (date) {
-                      handleFieldChange(field.id, date.toISOString());
-                    }
-                  }}
-                  initialFocus
-                />
-              </PopoverContent>
-            </Popover>
+          <div key={field.id} className={`space-y-2 rounded-lg border bg-background/60 p-4 transition-colors focus-within:border-primary/50 focus-within:ring-1 focus-within:ring-primary/20 ${getFieldSpanClass(field)}`}>
+            {renderLabel()}
+            <Input
+              id={field.id}
+              type="datetime-local"
+              value={typeof value === 'string' ? toDateTimeLocal(value) : ''}
+              onChange={(e) => handleFieldChange(field.id, fromDateTimeLocal(e.target.value))}
+              className={error ? 'border-red-500' : ''}
+              disabled={disabled}
+            />
             {field.description && (
-              <p className="text-xs text-gray-600">{field.description}</p>
+              <p className="text-xs text-muted-foreground">{field.description}</p>
             )}
             {error && <p className="text-xs text-red-500">{error}</p>}
           </div>
@@ -288,22 +1136,20 @@ export const DynamicForm: React.FC<DynamicFormProps> = ({
 
       case 'File Upload':
         return (
-          <div key={field.id} className="space-y-2">
-            <Label htmlFor={field.id} className="text-sm font-medium">
-              {field.label}
-              {field.isRequired && <span className="text-red-500 ml-1">*</span>}
-            </Label>
-            <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-gray-400 transition-colors">
-              <Upload className="mx-auto h-12 w-12 text-gray-400" />
+          <div key={field.id} className={`space-y-2 rounded-lg border bg-background/60 p-4 transition-colors focus-within:border-primary/50 focus-within:ring-1 focus-within:ring-primary/20 ${getFieldSpanClass(field)}`}>
+            {renderLabel()}
+            <div className="rounded-lg border-2 border-dashed border-muted p-6 text-center transition-colors hover:border-muted-foreground/40">
+              <Upload className="mx-auto h-12 w-12 text-muted-foreground" />
               <div className="mt-2">
                 <Label htmlFor={field.id} className="cursor-pointer">
-                  <span className="text-sm text-blue-600 hover:text-blue-500">Upload files</span>
+                  <span className="text-sm font-medium text-primary hover:opacity-90">Upload files</span>
                   <Input
                     id={field.id}
                     type="file"
                     multiple
                     accept={field.options?.join(',')}
                     className="hidden"
+                    disabled={disabled}
                     onChange={(e) => {
                       const files = Array.from(e.target.files || []);
                       handleFieldChange(field.id, files);
@@ -311,10 +1157,10 @@ export const DynamicForm: React.FC<DynamicFormProps> = ({
                   />
                 </Label>
               </div>
-              <p className="text-xs text-gray-500 mt-1">{field.options?.join(', ')}</p>
+              <p className="mt-1 text-xs text-muted-foreground">{field.options?.join(', ')}</p>
             </div>
             {field.description && (
-              <p className="text-xs text-gray-600">{field.description}</p>
+              <p className="text-xs text-muted-foreground">{field.description}</p>
             )}
             {error && <p className="text-xs text-red-500">{error}</p>}
           </div>
@@ -322,17 +1168,15 @@ export const DynamicForm: React.FC<DynamicFormProps> = ({
 
       case 'Auto-generated':
         return (
-          <div key={field.id} className="space-y-2">
-            <Label htmlFor={field.id} className="text-sm font-medium text-gray-500">
-              {field.label}
-            </Label>
+          <div key={field.id} className={`space-y-2 rounded-lg border bg-background/60 p-4 transition-colors focus-within:border-primary/50 focus-within:ring-1 focus-within:ring-primary/20 ${getFieldSpanClass(field)}`}>
+            {renderLabel()}
             <Input
-              value="Auto-generated"
+              value={String(value || (mode === 'create' ? 'Auto-generated on submit' : 'Auto-generated'))}
               disabled
-              className="bg-gray-50 text-gray-500"
+              className="bg-muted/40 text-muted-foreground"
             />
             {field.description && (
-              <p className="text-xs text-gray-600">{field.description}</p>
+              <p className="text-xs text-muted-foreground">{field.description}</p>
             )}
           </div>
         );
@@ -350,15 +1194,385 @@ export const DynamicForm: React.FC<DynamicFormProps> = ({
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {visibleFields.map(renderField)}
-          </div>
+          <Accordion type="multiple" defaultValue={sectioned.map((s: any) => String(s.key))} className="space-y-4">
+            {sectioned.map((section: any) => {
+              const iconMap: Record<string, any> = {
+                global: ClipboardList,
+                issue_details: FileText,
+                reporter_client: UserRound,
+                timeline: Timer,
+                location: MapPin,
+                operational: ShieldCheck,
+                actions: FileText,
+                attachments: Paperclip,
+              };
+              const Icon = iconMap[section.key] ?? FileText;
+              const accent = getSectionAccentColor(String(section.key));
+
+              const requiredCount = (section.fields as FieldDefinition[]).filter((f) => isEffectivelyRequired(f)).length;
+              const filledCount = (section.fields as FieldDefinition[]).filter((f) => {
+                const v = (formData as any)[f.id];
+                if (v === null || v === undefined) return false;
+                if (typeof v === 'boolean') return v === true;
+                if (Array.isArray(v)) return v.length > 0;
+                return String(v).trim().length > 0;
+              }).length;
+
+              return (
+                <AccordionItem key={section.key} value={String(section.key)} className="border-none">
+                  <Card
+                    className="border-l-4 bg-card/70 backdrop-blur supports-[backdrop-filter]:bg-card/60 transition-all hover:shadow-sm"
+                    style={{ borderLeftColor: accent }}
+                  >
+                    <CardHeader className="py-4">
+                      <AccordionTrigger className="py-0 hover:no-underline">
+                        <div className="flex min-w-0 flex-1 items-center gap-2">
+                          <Icon className="h-4 w-4 shrink-0" style={{ color: accent }} />
+                          <div className="min-w-0">
+                            <div className="truncate text-base font-semibold" style={{ color: accent }}>
+                              {section.title}
+                            </div>
+                          </div>
+                          <div className="ml-auto hidden items-center gap-2 pr-2 sm:flex">
+                            <Badge variant="secondary" className="text-xs">
+                              {filledCount}/{(section.fields as FieldDefinition[]).length} filled
+                            </Badge>
+                            <Badge variant={requiredCount > 0 ? 'default' : 'outline'} className="text-xs">
+                              {requiredCount} required
+                            </Badge>
+                          </div>
+                        </div>
+                      </AccordionTrigger>
+                    </CardHeader>
+                    <AccordionContent className="pb-0">
+                      <CardContent className="space-y-4 pt-0">
+                        {section.key === 'global' && (
+                          <div className="rounded-lg border bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
+                            Status auto-updates when the assigned agent resolves the ticket.
+                          </div>
+                        )}
+
+                        {section.key === 'reporter_client' && (
+                          <div className="rounded-xl border bg-background/50 p-4 backdrop-blur supports-[backdrop-filter]:bg-background/40">
+                            <div className="flex items-center justify-between gap-3">
+                              <div className="min-w-0">
+                                <div className="text-sm font-medium">Search client (Momence)</div>
+                                <div className="text-xs text-muted-foreground">Search by name, email, or phone.</div>
+                              </div>
+                              <Badge variant={(momenceCustomerSearch?.enabled ?? true) ? 'secondary' : 'outline'} className="text-xs">
+                                {(momenceCustomerSearch?.enabled ?? true) ? 'Enabled' : 'Disabled'}
+                              </Badge>
+                            </div>
+
+                            <div className="mt-3 relative">
+                              <Input
+                                value={customerSearchQuery}
+                                onChange={(e) => {
+                                  setCustomerSearchQuery(e.target.value);
+                                  setCustomerSearchOpen(true);
+                                }}
+                                onFocus={() => setCustomerSearchOpen(true)}
+                                onBlur={() => setTimeout(() => setCustomerSearchOpen(false), 150)}
+                                placeholder="Type at least 2 characters..."
+                              />
+
+                              {customerSearchOpen && (momenceCustomerSearch?.results?.length ?? 0) > 0 && (
+                                <div className="absolute z-50 mt-2 w-full rounded-xl border bg-popover text-popover-foreground shadow-lg opacity-100 max-h-72 overflow-y-auto">
+                                  {(momenceCustomerSearch?.results ?? []).slice(0, 50).map((c) => {
+                                    const name = `${c.firstName || ''} ${c.lastName || ''}`.trim() || c.email || 'Unknown';
+                                    const phone = c.phoneNumber || c.phone || '';
+                                    return (
+                                      <button
+                                        type="button"
+                                        key={c.id}
+                                        onMouseDown={(e) => e.preventDefault()}
+                                        onClick={() => selectCustomer(c)}
+                                        className="w-full px-4 py-3 text-left transition-colors hover:bg-muted"
+                                      >
+                                        <div className="flex items-center justify-between gap-3">
+                                          <div className="min-w-0">
+                                            <div className="truncate text-sm font-medium">{name}</div>
+                                            <div className="truncate text-xs text-muted-foreground">{c.email || phone}</div>
+                                          </div>
+                                          <Badge variant="outline" className="text-[10px]">{c.id}</Badge>
+                                        </div>
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </div>
+
+                            {Boolean((formData as any).momenceCustomerId) && (
+                              <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                                <Badge variant="secondary" className="text-xs">Selected</Badge>
+                                <span>Momence ID: {(formData as any).momenceCustomerId}</span>
+                              </div>
+                            )}
+
+                            {Boolean((formData as any).momenceCustomerSummary) && (
+                              <div className="mt-3 rounded-lg border bg-muted/20 p-3 text-xs">
+                                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                                  <div className="flex items-center justify-between gap-2">
+                                    <span className="text-muted-foreground">Total Visits</span>
+                                    <span className="font-medium">{String((formData as any).momenceCustomerSummary?.totalVisits ?? '') || '—'}</span>
+                                  </div>
+                                  <div className="flex items-center justify-between gap-2">
+                                    <span className="text-muted-foreground">Total Bookings</span>
+                                    <span className="font-medium">{String((formData as any).momenceCustomerSummary?.totalBookings ?? '') || '—'}</span>
+                                  </div>
+                                  <div className="flex items-center justify-between gap-2">
+                                    <span className="text-muted-foreground">Total Cancellations</span>
+                                    <span className="font-medium">{String((formData as any).momenceCustomerSummary?.totalCancellations ?? '') || '—'}</span>
+                                  </div>
+                                  <div className="flex items-center justify-between gap-2">
+                                    <span className="text-muted-foreground">Home Location</span>
+                                    <span className="font-medium truncate max-w-[14rem]">{String((formData as any).momenceCustomerSummary?.homeLocation ?? '') || '—'}</span>
+                                  </div>
+                                  <div className="flex items-center justify-between gap-2">
+                                    <span className="text-muted-foreground">First Visit Date</span>
+                                    <span className="font-medium">{toDisplayDate((formData as any).momenceCustomerSummary?.firstVisitDate) || '—'}</span>
+                                  </div>
+                                  <div className="flex items-center justify-between gap-2">
+                                    <span className="text-muted-foreground">Last Visit Date</span>
+                                    <span className="font-medium">{toDisplayDate((formData as any).momenceCustomerSummary?.lastVisitDate) || '—'}</span>
+                                  </div>
+                                  <div className="flex items-center justify-between gap-2 sm:col-span-2">
+                                    <span className="text-muted-foreground">Active Memberships</span>
+                                    <span className="font-medium truncate max-w-[24rem]">
+                                      {(((formData as any).momenceCustomerSummary?.activeMemberships ?? []) as string[]).join(', ') || '—'}
+                                    </span>
+                                  </div>
+                                  <div className="flex items-start justify-between gap-2 sm:col-span-2">
+                                    <span className="text-muted-foreground">Recent Sessions Booked</span>
+                                    <span className="font-medium text-right whitespace-pre-line">
+                                      {((((formData as any).momenceCustomerSummary?.recentSessionsBooked ?? []) as Array<{ name: string; startsAt?: string }>).
+                                        map((s) => {
+                                          const d = s?.startsAt ? toDisplayDate(s.startsAt) : '';
+                                          return d ? `${s?.name ?? 'Session'} (${d})` : String(s?.name ?? 'Session');
+                                        })
+                                        .join('\n')) || '—'}
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center justify-between gap-2 sm:col-span-2">
+                                    <span className="text-muted-foreground">Goals</span>
+                                    <span className="font-medium truncate max-w-[24rem]">{String((formData as any).momenceCustomerSummary?.goals ?? '') || '—'}</span>
+                                  </div>
+                                  <div className="flex items-center justify-between gap-2 sm:col-span-2">
+                                    <span className="text-muted-foreground">Medical / Health</span>
+                                    <span className="font-medium truncate max-w-[24rem]">{String((formData as any).momenceCustomerSummary?.medical ?? '') || '—'}</span>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {section.key === 'timeline' && (isHostedClassTemplate || section.fields.some((f: FieldDefinition) => f.label.toLowerCase().includes('class'))) && (
+                          <div className="rounded-xl border bg-background/50 p-4 backdrop-blur supports-[backdrop-filter]:bg-background/40">
+                            <div className="flex items-center justify-between gap-3">
+                              <div className="min-w-0">
+                                <div className="text-sm font-medium">Search class/session (Momence)</div>
+                                <div className="text-xs text-muted-foreground">Attach a class to prefill class date/details.</div>
+                              </div>
+                              <Badge variant={(momenceSessionSearch?.enabled ?? true) ? 'secondary' : 'outline'} className="text-xs">
+                                {(momenceSessionSearch?.enabled ?? true) ? 'Enabled' : 'Disabled'}
+                              </Badge>
+                            </div>
+
+                            <div className="mt-3 relative">
+                              <Input
+                                value={sessionSearchQuery}
+                                onChange={(e) => {
+                                  setSessionSearchQuery(e.target.value);
+                                  setSessionSearchOpen(true);
+                                }}
+                                onFocus={() => setSessionSearchOpen(true)}
+                                onBlur={() => setTimeout(() => setSessionSearchOpen(false), 150)}
+                                placeholder="Search by class name..."
+                              />
+
+                              {sessionSearchOpen && (momenceSessionSearch?.results?.length ?? 0) > 0 && (
+                                <div className="absolute z-50 mt-2 w-full rounded-xl border bg-popover text-popover-foreground shadow-lg opacity-100 max-h-72 overflow-y-auto">
+                                  {(momenceSessionSearch?.results ?? []).slice(0, 50).map((s) => {
+                                    const teacher = s.teacher ? `${s.teacher.firstName || ''} ${s.teacher.lastName || ''}`.trim() : '';
+                                    const { day, time } = toLocalDayAndTime((s as any).startsAt);
+                                    const counts = getSessionCounts(s as any);
+                                    const metaLeft = [day && time ? `${day} ${time}` : null, teacher || null]
+                                      .filter(Boolean)
+                                      .join(' • ');
+                                    const metaRight =
+                                      counts.booked !== null && counts.capacity !== null
+                                        ? `${counts.booked}/${counts.capacity}`
+                                        : counts.available !== null
+                                          ? `Available: ${counts.available}`
+                                          : '';
+                                    return (
+                                      <button
+                                        type="button"
+                                        key={s.id}
+                                        onMouseDown={(e) => e.preventDefault()}
+                                        onClick={() => selectSession(s)}
+                                        className="w-full px-4 py-3 text-left transition-colors hover:bg-muted"
+                                      >
+                                        <div className="flex items-center justify-between gap-3">
+                                          <div className="min-w-0">
+                                            <div className="truncate text-sm font-medium">{s.name || 'Untitled session'}</div>
+                                            <div className="truncate text-xs text-muted-foreground">{metaLeft}</div>
+                                          </div>
+                                          <div className="flex items-center gap-2">
+                                            {metaRight ? <Badge variant="secondary" className="text-[10px]">{metaRight}</Badge> : null}
+                                            <Badge variant="outline" className="text-[10px]">{s.id}</Badge>
+                                          </div>
+                                        </div>
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </div>
+
+                            {Boolean((formData as any).momenceSessionId) && (
+                              <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                                <Badge variant="secondary" className="text-xs">Selected</Badge>
+                                <span>Session ID: {(formData as any).momenceSessionId}</span>
+                              </div>
+                            )}
+
+                            {Boolean((formData as any).momenceSessionSummary) && (
+                              <div className="mt-3 rounded-lg border bg-muted/20 p-3 text-xs">
+                                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                                  <div className="flex items-center justify-between gap-2 sm:col-span-2">
+                                    <span className="text-muted-foreground">Class</span>
+                                    <span className="font-medium truncate max-w-[24rem]">{String((formData as any).momenceSessionSummary?.name ?? '') || '—'}</span>
+                                  </div>
+                                  <div className="flex items-center justify-between gap-2">
+                                    <span className="text-muted-foreground">Day</span>
+                                    <span className="font-medium">{String((formData as any).momenceSessionSummary?.day ?? '') || '—'}</span>
+                                  </div>
+                                  <div className="flex items-center justify-between gap-2">
+                                    <span className="text-muted-foreground">Time</span>
+                                    <span className="font-medium">{String((formData as any).momenceSessionSummary?.time ?? '') || '—'}</span>
+                                  </div>
+                                  <div className="flex items-center justify-between gap-2 sm:col-span-2">
+                                    <span className="text-muted-foreground">Teacher</span>
+                                    <span className="font-medium truncate max-w-[24rem]">{String((formData as any).momenceSessionSummary?.teacher ?? '') || '—'}</span>
+                                  </div>
+                                  <div className="flex items-center justify-between gap-2">
+                                    <span className="text-muted-foreground">Signups</span>
+                                    <span className="font-medium">{String((formData as any).momenceSessionSummary?.booked ?? '') || '—'}</span>
+                                  </div>
+                                  <div className="flex items-center justify-between gap-2">
+                                    <span className="text-muted-foreground">Spots Available</span>
+                                    <span className="font-medium">{String((formData as any).momenceSessionSummary?.available ?? '') || '—'}</span>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                        {section.key === 'reporter_client' &&
+                          fields.some((f) => CLIENT_FIELD_IDS.has(f.id) && !f.isHidden) &&
+                          !shouldShowClientSection && (
+                            <div className="flex items-center justify-between rounded-md border bg-muted/30 px-3 py-2">
+                              <div className="text-sm">Client details are optional.</div>
+                              <Button type="button" variant="outline" size="sm" onClick={() => setIncludeClientDetails(true)}>
+                                Add client details
+                              </Button>
+                            </div>
+                          )}
+
+                        {section.key === 'actions' && hasFollowUpRequired && (
+                          <div className="rounded-xl border bg-background/50 p-4 backdrop-blur supports-[backdrop-filter]:bg-background/40">
+                            <div className="flex items-center justify-between gap-3">
+                              <div>
+                                <div className="text-sm font-medium">Follow-ups</div>
+                                <div className="text-xs text-muted-foreground">Add one or more follow-ups for this issue.</div>
+                              </div>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="backdrop-blur supports-[backdrop-filter]:bg-background/40"
+                                onClick={() => setFollowUps([...getFollowUps(), { date: '', reason: '' }])}
+                              >
+                                Add follow-up
+                              </Button>
+                            </div>
+
+                            <div className="mt-4 space-y-3">
+                              {getFollowUps().length === 0 ? (
+                                <div className="text-sm text-muted-foreground">No follow-ups added yet.</div>
+                              ) : (
+                                getFollowUps().map((fu, idx) => (
+                                  <div key={idx} className="rounded-lg border bg-background/60 p-4">
+                                    <div className="flex items-center justify-between">
+                                      <div className="text-sm font-medium">Follow-up #{idx + 1}</div>
+                                      <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="sm"
+                                        className="text-destructive hover:text-destructive"
+                                        onClick={() => {
+                                          const next = [...getFollowUps()];
+                                          next.splice(idx, 1);
+                                          setFollowUps(next);
+                                        }}
+                                      >
+                                        Remove
+                                      </Button>
+                                    </div>
+
+                                    <div className="mt-3 grid grid-cols-1 gap-4 md:grid-cols-2">
+                                      <div className="space-y-2">
+                                        <Label className="text-sm font-medium">Follow-up Date</Label>
+                                        <Input
+                                          type="date"
+                                          value={fu.date}
+                                          onChange={(e) => {
+                                            const next = [...getFollowUps()];
+                                            next[idx] = { ...next[idx], date: e.target.value };
+                                            setFollowUps(next);
+                                          }}
+                                        />
+                                      </div>
+                                      <div className="space-y-2 md:col-span-2">
+                                        <Label className="text-sm font-medium">Follow-up Reason</Label>
+                                        <Textarea
+                                          rows={3}
+                                          value={fu.reason}
+                                          onChange={(e) => {
+                                            const next = [...getFollowUps()];
+                                            next[idx] = { ...next[idx], reason: e.target.value };
+                                            setFollowUps(next);
+                                          }}
+                                          placeholder="Why is follow-up needed?"
+                                        />
+                                      </div>
+                                    </div>
+                                  </div>
+                                ))
+                              )}
+                            </div>
+                          </div>
+                        )}
+
+                        <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                          {section.fields.map(renderField)}
+                        </div>
+                      </CardContent>
+                    </AccordionContent>
+                  </Card>
+                </AccordionItem>
+              );
+            })}
+          </Accordion>
           
           <div className="flex justify-end space-x-4 pt-6 border-t">
-            <Button type="button" variant="outline" onClick={() => setFormData({})}>
+            <Button type="button" variant="outline" className="backdrop-blur supports-[backdrop-filter]:bg-background/40" onClick={() => setFormData(initialData)}>
               Reset
             </Button>
-            <Button type="submit" disabled={isLoading}>
+            <Button type="submit" disabled={isLoading} className="backdrop-blur supports-[backdrop-filter]:bg-primary/90">
               {isLoading ? 'Submitting...' : 'Submit Ticket'}
             </Button>
           </div>

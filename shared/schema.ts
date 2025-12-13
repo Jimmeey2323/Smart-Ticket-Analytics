@@ -37,6 +37,7 @@ export const users = pgTable("users", {
   email: varchar("email").unique(),
   firstName: varchar("first_name"),
   lastName: varchar("last_name"),
+  fullName: varchar("full_name").notNull(),
   profileImageUrl: varchar("profile_image_url"),
   role: userRoleEnum("role").default('support_staff').notNull(),
   department: departmentEnum("department"),

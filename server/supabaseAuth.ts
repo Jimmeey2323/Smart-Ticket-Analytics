@@ -45,20 +45,63 @@ export function verifySupabaseAuth(req: Request, res: Response, next: NextFuncti
       
       // Try to get or create user in our database
       try {
+        const firstName = user.user_metadata?.first_name || user.user_metadata?.full_name?.split(' ')[0] || '';
+        const lastName = user.user_metadata?.last_name || user.user_metadata?.full_name?.split(' ').slice(1).join(' ') || '';
+        const fullName = String(user.user_metadata?.full_name || `${firstName} ${lastName}`.trim() || user.email || '').trim();
+        const email = user.email ?? null;
+
+        // Always ensure the DB user id matches the Supabase user id.
+        // This is critical for role checks (requireAdmin/requireManager) which
+        // look up by Supabase id.
         let dbUser = await storage.getUser(user.id);
-        
         if (!dbUser) {
-          // Create user if doesn't exist
-          dbUser = await storage.upsertUser({
-            id: user.id,
-            email: user.email || '',
-            firstName: user.user_metadata?.first_name || user.user_metadata?.full_name?.split(' ')[0] || '',
-            lastName: user.user_metadata?.last_name || user.user_metadata?.full_name?.split(' ').slice(1).join(' ') || '',
-            profileImageUrl: user.user_metadata?.avatar_url || null,
-            role: 'support_staff', // Default role
-            department: null,
-            isActive: true
+          if (email) {
+            dbUser = await storage.ensureUserIdForEmail({
+              id: user.id,
+              email,
+              firstName,
+              lastName,
+              fullName,
+              profileImageUrl: user.user_metadata?.avatar_url || null,
+              isActive: true,
+            });
+          } else {
+            dbUser = await storage.upsertUser({
+              id: user.id,
+              email,
+              firstName,
+              lastName,
+              fullName,
+              profileImageUrl: user.user_metadata?.avatar_url || null,
+              role: 'support_staff',
+              department: null,
+              isActive: true,
+            });
+          }
+        } else if (email) {
+          // Keep profile fields reasonably fresh without overwriting role.
+          // Use ensureUserIdForEmail to safely handle existing users
+          dbUser = await storage.ensureUserIdForEmail({
+            id: dbUser.id,
+            email: email,
+            firstName: dbUser.firstName ?? firstName,
+            lastName: dbUser.lastName ?? lastName,
+            fullName: dbUser.fullName || fullName || dbUser.email || '',
+            profileImageUrl: user.user_metadata?.avatar_url || dbUser.profileImageUrl || null,
+            role: dbUser.role ?? 'support_staff',
+            department: dbUser.department ?? null,
+            isActive: true,
           });
+        } else {
+          // Fallback if no email - just update existing user directly
+          const updated = { ...dbUser } as any;
+          updated.firstName = dbUser.firstName ?? firstName;
+          updated.lastName = dbUser.lastName ?? lastName;
+          updated.fullName = dbUser.fullName || fullName || dbUser.email || '';
+          updated.profileImageUrl = user.user_metadata?.avatar_url || dbUser.profileImageUrl || null;
+          updated.isActive = true;
+          updated.updatedAt = new Date();
+          dbUser = updated;
         }
         
         (req as any).user = dbUser;
@@ -135,6 +178,21 @@ export const authAdmin = {
     return data;
   },
 
+  async inviteUserByEmail(email: string, userData?: any) {
+    if (!supabaseAdmin) throw new Error('SUPABASE_SERVICE_ROLE_KEY is required for admin user management');
+    // Supabase Admin API supports inviting users by email (sends an invite link).
+    const adminAny = supabaseAdmin.auth.admin as any;
+    if (typeof adminAny.inviteUserByEmail !== 'function') {
+      throw new Error('Supabase inviteUserByEmail is not available in this Supabase client version');
+    }
+
+    const { data, error } = await adminAny.inviteUserByEmail(email, {
+      data: userData,
+    });
+    if (error) throw error;
+    return data;
+  },
+
   async updateUser(userId: string, attributes: any) {
     if (!supabaseAdmin) throw new Error('SUPABASE_SERVICE_ROLE_KEY is required for admin user management');
     const { data, error } = await supabaseAdmin.auth.admin.updateUserById(userId, attributes);
@@ -198,10 +256,15 @@ export function setupSupabaseAuth(app: Express) {
       const user = (req as any).user;
       const { firstName, lastName, department } = req.body;
 
+      const nextFirst = firstName || user.firstName;
+      const nextLast = lastName || user.lastName;
+      const nextFull = String(`${nextFirst || ''} ${nextLast || ''}`).trim() || user.fullName || user.email || '';
+
       const updatedUser = await storage.upsertUser({
         ...user,
-        firstName: firstName || user.firstName,
-        lastName: lastName || user.lastName,
+        firstName: nextFirst,
+        lastName: nextLast,
+        fullName: nextFull,
         department: department || user.department
       });
 

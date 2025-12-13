@@ -62,6 +62,115 @@ async function main() {
         add column if not exists created_at timestamptz default now();`,
     );
 
+    // Dynamic form field definitions (import + runtime)
+    await sql.unsafe(
+      `create table if not exists public.form_fields (
+        id text primary key
+      );`,
+    );
+    await sql.unsafe(
+      `alter table public.form_fields
+        add column if not exists label text,
+        add column if not exists field_type text,
+        add column if not exists options jsonb,
+        add column if not exists sub_category text,
+        add column if not exists category text,
+        add column if not exists unique_id text,
+        add column if not exists description text,
+        add column if not exists is_required boolean not null default false,
+        add column if not exists is_hidden boolean not null default false,
+        add column if not exists validation jsonb,
+        add column if not exists order_index integer not null default 0,
+        add column if not exists is_active boolean not null default true,
+        add column if not exists created_at timestamptz default now(),
+        add column if not exists updated_at timestamptz default now();`,
+    );
+
+    // Settings: Field groups
+    await sql.unsafe(
+      `create table if not exists public.field_groups (
+        id text primary key
+      );`,
+    );
+    await sql.unsafe(
+      `alter table public.field_groups
+        add column if not exists name text,
+        add column if not exists category_id text,
+        add column if not exists sub_category_id text,
+        add column if not exists field_ids jsonb,
+        add column if not exists order_index integer not null default 0,
+        add column if not exists is_collapsible boolean not null default false,
+        add column if not exists is_collapsed_by_default boolean not null default false,
+        add column if not exists created_at timestamptz default now();`,
+    );
+
+    // Settings: Auto-assignment rules
+    await sql.unsafe(
+      `create table if not exists public.assignment_rules (
+        id text primary key
+      );`,
+    );
+    await sql.unsafe(
+      `alter table public.assignment_rules
+        add column if not exists name text,
+        add column if not exists category_id text,
+        add column if not exists subcategory_id text,
+        add column if not exists department text,
+        add column if not exists priority text,
+        add column if not exists assign_to_user_id text,
+        add column if not exists assign_to_team_id text,
+        add column if not exists is_active boolean not null default true,
+        add column if not exists created_at timestamptz default now();`,
+    );
+
+    // Settings: Escalation rules
+    await sql.unsafe(
+      `create table if not exists public.escalation_rules (
+        id text primary key
+      );`,
+    );
+    await sql.unsafe(
+      `alter table public.escalation_rules
+        add column if not exists name text,
+        add column if not exists priority text,
+        add column if not exists escalate_after_minutes integer,
+        add column if not exists escalate_to_role text,
+        add column if not exists notify_original_assignee boolean not null default true,
+        add column if not exists is_active boolean not null default true,
+        add column if not exists created_at timestamptz default now();`,
+    );
+
+    // Teams (referenced by assignment rules)
+    await sql.unsafe(
+      `create table if not exists public.teams (
+        id text primary key
+      );`,
+    );
+    await sql.unsafe(
+      `alter table public.teams
+        add column if not exists name text,
+        add column if not exists department text,
+        add column if not exists description text,
+        add column if not exists manager_id text,
+        add column if not exists created_at timestamptz default now(),
+        add column if not exists updated_at timestamptz default now();`,
+    );
+
+    // Saved filters (not always used, but referenced by schema)
+    await sql.unsafe(
+      `create table if not exists public.saved_filters (
+        id text primary key
+      );`,
+    );
+    await sql.unsafe(
+      `alter table public.saved_filters
+        add column if not exists user_id text,
+        add column if not exists name text,
+        add column if not exists filters jsonb,
+        add column if not exists is_default boolean not null default false,
+        add column if not exists created_at timestamptz default now();`,
+    );
+
     await sql.unsafe(
       `create table if not exists public.locations (
         id text primary key,

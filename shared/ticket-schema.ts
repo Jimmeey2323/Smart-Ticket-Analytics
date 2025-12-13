@@ -16,6 +16,7 @@ export interface FieldDefinition {
 export type FieldType = 
   | 'Auto-generated'
   | 'DateTime'
+  | 'Date'
   | 'Dropdown'
   | 'Text'
   | 'Email'

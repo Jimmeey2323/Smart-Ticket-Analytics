@@ -27,14 +27,13 @@ app.use(
 
 app.use(express.urlencoded({ extended: false }));
 
-export function log(message: string, source = "express") {
+function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
     hour: "numeric",
     minute: "2-digit",
     second: "2-digit",
     hour12: true,
   });
-
   console.log(`${formattedTime} [${source}] ${message}`);
 }
 
@@ -73,7 +72,9 @@ app.use((req, res, next) => {
     const message = err.message || "Internal Server Error";
 
     res.status(status).json({ message });
-    throw err;
+    // Never throw from Express error middleware; it will crash the process and
+    // can cause client-side "glitching" (especially during auth flows).
+    console.error("Unhandled error:", err);
   });
 
   // importantly only setup vite in development and after
@@ -90,15 +91,67 @@ app.use((req, res, next) => {
   // Other ports are firewalled. Default to 5000 if not specified.
   // this serves both the API and the client.
   // It is the only port that is not firewalled.
-  const port = parseInt(process.env.PORT || "5000", 10);
-  httpServer.listen(
-    {
-      port,
-      host: "0.0.0.0",
-      reusePort: true,
-    },
-    () => {
+  const explicitPort = process.env.PORT;
+  const basePort = parseInt(explicitPort || "5000", 10);
+  const canFallbackPorts = !explicitPort && process.env.NODE_ENV !== "production";
+  const maxAttempts = canFallbackPorts ? 20 : 1;
+
+  const listenOnce = (port: number) =>
+    new Promise<void>((resolve, reject) => {
+      const onError = (err: any) => {
+        httpServer.off("listening", onListening);
+        reject(err);
+      };
+      const onListening = () => {
+        httpServer.off("error", onError);
+        resolve();
+      };
+
+      httpServer.once("error", onError);
+      httpServer.once("listening", onListening);
+
+      // Default listen options. On some macOS/dev environments `reusePort: true`
+      // can cause `ENOTSUP` when binding to 0.0.0.0. Avoid reusePort on darwin
+      // and fall back to 127.0.0.1 when binding to 0.0.0.0 fails.
+      const baseOptions: any = { port, host: "0.0.0.0" };
+      if (process.platform !== "darwin") {
+        baseOptions.reusePort = true;
+      }
+
+      try {
+        httpServer.listen(baseOptions);
+      } catch (err) {
+        // If OS doesn't support those options, try a safe fallback
+        httpServer.off("error", onError);
+        httpServer.off("listening", onListening);
+
+        // Retry without reusePort and bind to localhost
+        const fallbackOptions = { port, host: "127.0.0.1" };
+        httpServer.once("error", onError);
+        httpServer.once("listening", onListening);
+        httpServer.listen(fallbackOptions);
+      }
+    });
+
+  let lastError: unknown = null;
+  for (let i = 0; i < maxAttempts; i++) {
+    const port = basePort + i;
+    try {
+      await listenOnce(port);
       log(`serving on port ${port}`);
-    },
-  );
+      lastError = null;
+      break;
+    } catch (err: any) {
+      lastError = err;
+      if (canFallbackPorts && err?.code === "EADDRINUSE") {
+        log(`port ${port} already in use, trying ${port + 1}`);
+        continue;
+      }
+      throw err;
+    }
+  }
+
+  if (lastError) {
+    throw lastError;
+  }
 })();

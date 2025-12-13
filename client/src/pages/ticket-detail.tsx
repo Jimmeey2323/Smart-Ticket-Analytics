@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation, useParams } from "wouter";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -29,6 +29,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { getCategoryIcon } from "@/lib/category-icons";
 import {
   ArrowLeft,
   Clock,
@@ -46,6 +47,16 @@ import {
   AlertCircle,
 } from "lucide-react";
 import type { TicketWithRelations, TicketComment, TicketHistory } from "@shared/schema";
+
+type ApiSubcategory = {
+  id: string;
+  categoryId?: string;
+  category_id?: string;
+  name: string;
+  description?: string | null;
+  formFields?: any;
+  form_fields?: any;
+};
 
 type ApiCategory = {
   id: string;
@@ -169,12 +180,38 @@ export default function TicketDetail() {
     queryKey: ["/api/tickets", id],
   });
 
+  const submittedFormData = useMemo(() => (ticket?.formData ?? {}) as Record<string, any>, [ticket?.formData]);
+  const momenceCustomerId = submittedFormData?.momenceCustomerId ? String(submittedFormData.momenceCustomerId) : '';
+  const momenceSessionId = submittedFormData?.momenceSessionId ? String(submittedFormData.momenceSessionId) : '';
+  const followUps = useMemo(() => {
+    const raw = submittedFormData?.__followUps;
+    if (!Array.isArray(raw)) return [] as Array<{ date: string; reason: string }>;
+    return raw
+      .map((x: any) => ({ date: String(x?.date ?? '').trim(), reason: String(x?.reason ?? '').trim() }))
+      .filter((x: any) => x.date || x.reason);
+  }, [submittedFormData]);
+
   const { data: categories = [] } = useQuery<ApiCategory[]>({
     queryKey: ["/api/categories"],
   });
 
+  const globalCategoryId = useMemo(() => {
+    const global = categories.find((c) => (c.name ?? "").toLowerCase() === "global");
+    return global?.id ?? null;
+  }, [categories]);
+
   const { data: locations = [] } = useQuery<ApiLocation[]>({
     queryKey: ["/api/locations"],
+  });
+
+  const { data: globalSubCategories = [] } = useQuery<ApiSubcategory[]>({
+    queryKey: globalCategoryId ? ["/api/categories", globalCategoryId, "subcategories"] : ["_global_subcategories_disabled"],
+    enabled: !!globalCategoryId,
+  });
+
+  const { data: subCategories = [] } = useQuery<ApiSubcategory[]>({
+    queryKey: ticket?.categoryId ? ["/api/categories", ticket.categoryId, "subcategories"] : ["_subcategories_disabled"],
+    enabled: !!ticket?.categoryId,
   });
 
   const updateStatusMutation = useMutation({
@@ -274,6 +311,112 @@ export default function TicketDetail() {
   const category = categories.find((c) => c.id === ticket.categoryId);
   const location = locations.find((l) => l.id === ticket.locationId);
   const department = ticket.department;
+
+  const selectedSubCategory = subCategories.find((sc) => sc.id === ticket.subcategoryId) ?? null;
+
+  function extractEmbeddedFields(sc: ApiSubcategory | null | undefined): any[] {
+    if (!sc) return [];
+    const raw = (sc as any).formFields ?? (sc as any).form_fields;
+    if (!raw) return [];
+    if (Array.isArray(raw)) return raw;
+    if (Array.isArray(raw.fields)) return raw.fields;
+    return [];
+  }
+
+  function mapEmbeddedTypeToFieldType(raw: string): string {
+    const t = (raw || "").trim();
+    if (
+      t === "Auto-generated" ||
+      t === "DateTime" ||
+      t === "Date" ||
+      t === "Dropdown" ||
+      t === "Text" ||
+      t === "Email" ||
+      t === "Phone" ||
+      t === "Long Text" ||
+      t === "Checkbox" ||
+      t === "File Upload" ||
+      t === "Number"
+    ) {
+      return t;
+    }
+
+    const lower = t.toLowerCase();
+    if (lower === "dropdown" || lower === "select" || lower === "radio") return "Dropdown";
+    if (lower === "textarea" || lower === "longtext" || lower === "long text") return "Long Text";
+    if (lower === "date") return "Date";
+    if (lower === "datetime" || lower === "time") return "DateTime";
+    if (lower === "email") return "Email";
+    if (lower === "tel" || lower === "phone") return "Phone";
+    if (lower === "number") return "Number";
+    if (lower === "checkbox") return "Checkbox";
+    if (lower === "file" || lower === "file upload") return "File Upload";
+    return "Text";
+  }
+
+  function toFieldDefinition(embedded: any, categoryName: string, subCategoryName: string) {
+    const id = String(embedded?.id ?? embedded?.uniqueId ?? "").trim();
+    const label = String(embedded?.label ?? "").trim() || id;
+    const fieldType = mapEmbeddedTypeToFieldType(String(embedded?.fieldType ?? embedded?.type ?? "Text"));
+    const options = Array.isArray(embedded?.options) ? embedded.options.map((o: any) => String(o)) : undefined;
+    return {
+      id,
+      label,
+      fieldType,
+      options,
+      subCategory: subCategoryName,
+      category: categoryName,
+      uniqueId: id,
+      description: String(embedded?.description ?? ""),
+      isRequired: Boolean(embedded?.isRequired ?? embedded?.required ?? false),
+      isHidden: Boolean(embedded?.isHidden ?? embedded?.hidden ?? false),
+      validation: Array.isArray(embedded?.validation) ? embedded.validation : undefined,
+    };
+  }
+
+  const { globalFieldDefs, subCategoryFieldDefs } = useMemo(() => {
+    const globalSc = globalSubCategories.find((s) => (s.name ?? "").toLowerCase() === "global") ?? null;
+    const globalFields = extractEmbeddedFields(globalSc).map((f) => toFieldDefinition(f, "Global", "Global"));
+    const subFields = extractEmbeddedFields(selectedSubCategory).map((f) => toFieldDefinition(f, category?.name ?? "", selectedSubCategory?.name ?? ""));
+
+    const visibleGlobal = globalFields.filter((f) => !f.isHidden && f.fieldType !== "Auto-generated");
+    const visibleSub = subFields.filter((f) => !f.isHidden && f.fieldType !== "Auto-generated");
+
+    return { globalFieldDefs: visibleGlobal, subCategoryFieldDefs: visibleSub };
+  }, [category?.name, globalSubCategories, selectedSubCategory]);
+
+  // submittedFormData is defined above via useMemo
+
+  const renderValue = (value: any): string => {
+    if (value === null || value === undefined) return "—";
+    if (typeof value === "boolean") return value ? "Yes" : "No";
+    if (typeof value === "number") return String(value);
+    if (typeof value === "string") return value.trim() ? value : "—";
+
+    if (Array.isArray(value)) {
+      if (value.length === 0) return "—";
+      if (value.every((v) => ["string", "number", "boolean"].includes(typeof v))) {
+        return value.map(renderValue).join(", ");
+      }
+      return `${value.length} item(s)`;
+    }
+
+    try {
+      const json = JSON.stringify(value);
+      return json.length > 180 ? `${json.slice(0, 180)}…` : json;
+    } catch {
+      return "—";
+    }
+  };
+
+  const hasMeaningfulValue = (value: any): boolean => {
+    if (value === null || value === undefined) return false;
+    if (typeof value === "boolean") return true;
+    if (typeof value === "number") return true;
+    if (typeof value === "string") return value.trim().length > 0;
+    if (Array.isArray(value)) return value.length > 0;
+    return true;
+  };
 
   const handleSubmitComment = () => {
     if (!newComment.trim()) return;
@@ -532,91 +675,160 @@ export default function TicketDetail() {
             <CardHeader>
               <CardTitle className="text-base">Details</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div>
-                <label className="text-sm text-muted-foreground">Status</label>
-                <Select
-                  value={ticket.status}
-                  onValueChange={(v) => updateStatusMutation.mutate(v)}
-                  disabled={updateStatusMutation.isPending}
-                >
-                  <SelectTrigger className="mt-1" data-testid="select-status">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {statusOptions.map((opt) => (
-                      <SelectItem key={opt.value} value={opt.value}>
-                        {opt.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+            <CardContent className="space-y-5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm text-muted-foreground">Status</label>
+                  <Select
+                    value={ticket.status}
+                    onValueChange={(v) => updateStatusMutation.mutate(v)}
+                    disabled={updateStatusMutation.isPending}
+                  >
+                    <SelectTrigger className="mt-1" data-testid="select-status">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {statusOptions.map((opt) => (
+                        <SelectItem key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <label className="text-sm text-muted-foreground">Priority</label>
+                  <Select
+                    value={ticket.priority}
+                    onValueChange={(v) => updatePriorityMutation.mutate(v)}
+                    disabled={updatePriorityMutation.isPending}
+                  >
+                    <SelectTrigger className="mt-1" data-testid="select-priority">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {priorityOptions.map((opt) => (
+                        <SelectItem key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
-              <div>
-                <label className="text-sm text-muted-foreground">Priority</label>
-                <Select
-                  value={ticket.priority}
-                  onValueChange={(v) => updatePriorityMutation.mutate(v)}
-                  disabled={updatePriorityMutation.isPending}
-                >
-                  <SelectTrigger className="mt-1" data-testid="select-priority">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {priorityOptions.map((opt) => (
-                      <SelectItem key={opt.value} value={opt.value}>
-                        {opt.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+
               <Separator />
+
               <div className="space-y-3">
-                <div className="flex items-center gap-2 text-sm">
-                  <User className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-muted-foreground">Client:</span>
-                  <span className="font-medium">{ticket.clientName}</span>
-                </div>
-                {ticket.clientEmail && (
+                <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Classification</div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="flex items-center gap-2 text-sm">
-                    <span className="text-muted-foreground ml-6">{ticket.clientEmail}</span>
+                    <MapPin className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-muted-foreground">Location</span>
+                    <span className="ml-auto text-right">{location?.name || ticket.locationId || "—"}</span>
                   </div>
-                )}
-                {ticket.clientPhone && (
-                  <div className="flex items-center gap-2 text-sm">
-                    <span className="text-muted-foreground ml-6">{ticket.clientPhone}</span>
-                  </div>
-                )}
-                {ticket.clientStatus && (
-                  <div className="flex items-center gap-2 text-sm">
-                    <span className="text-muted-foreground ml-6">Status: {ticket.clientStatus}</span>
-                  </div>
-                )}
-                {ticket.clientMood && (
-                  <div className="flex items-center gap-2 text-sm">
-                    <span className="text-muted-foreground ml-6">Mood: {ticket.clientMood}</span>
-                  </div>
-                )}
-                <div className="flex items-center gap-2 text-sm">
-                  <MapPin className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-muted-foreground">Location:</span>
-                  <span>{location?.name || ticket.locationId}</span>
-                </div>
-                {category && (
-                  <div className="flex items-center gap-2 text-sm">
-                    <AlertTriangle className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-muted-foreground">Category:</span>
-                    <span>{category.name}</span>
-                  </div>
-                )}
-                {department && (
                   <div className="flex items-center gap-2 text-sm">
                     <User className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-muted-foreground">Department:</span>
-                    <span>{department}</span>
+                    <span className="text-muted-foreground">Department</span>
+                    <span className="ml-auto text-right">{department || "—"}</span>
                   </div>
-                )}
+                  <div className="flex items-center gap-2 text-sm">
+                    {(() => {
+                      const Icon = getCategoryIcon(category?.icon);
+                      return <Icon className="h-4 w-4 text-muted-foreground" />;
+                    })()}
+                    <span className="text-muted-foreground">Category</span>
+                    <span className="ml-auto text-right">{category?.name || "—"}</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-sm">
+                    <AlertTriangle className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-muted-foreground">Subcategory</span>
+                    <span className="ml-auto text-right">{selectedSubCategory?.name || ticket.subcategory?.name || "—"}</span>
+                  </div>
+                </div>
+              </div>
+
+              <Separator />
+
+              <div className="space-y-3">
+                <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Client</div>
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 text-sm">
+                    <User className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-muted-foreground">Name</span>
+                    <span className="ml-auto font-medium text-right">{ticket.clientName}</span>
+                  </div>
+                  {ticket.clientEmail && (
+                    <div className="flex items-center gap-2 text-sm">
+                      <span className="text-muted-foreground">Email</span>
+                      <span className="ml-auto text-right">{ticket.clientEmail}</span>
+                    </div>
+                  )}
+                  {ticket.clientPhone && (
+                    <div className="flex items-center gap-2 text-sm">
+                      <span className="text-muted-foreground">Phone</span>
+                      <span className="ml-auto text-right">{ticket.clientPhone}</span>
+                    </div>
+                  )}
+                  {ticket.clientStatus && (
+                    <div className="flex items-center gap-2 text-sm">
+                      <span className="text-muted-foreground">Status</span>
+                      <span className="ml-auto text-right">{ticket.clientStatus}</span>
+                    </div>
+                  )}
+                  {ticket.clientMood && (
+                    <div className="flex items-center gap-2 text-sm">
+                      <span className="text-muted-foreground">Mood</span>
+                      <span className="ml-auto text-right">{ticket.clientMood}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Submitted Fields</CardTitle>
+              <CardDescription>
+                Global fields and sub-category specific fields submitted with this ticket.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-5">
+              <div className="space-y-3">
+                <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Global</div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {globalFieldDefs
+                    .filter((f) => hasMeaningfulValue(submittedFormData[f.id]))
+                    .map((f) => (
+                      <div key={f.id} className="rounded-md border bg-muted/30 p-3">
+                        <div className="text-xs text-muted-foreground">{f.label}</div>
+                        <div className="text-sm mt-1 break-words">{renderValue(submittedFormData[f.id])}</div>
+                      </div>
+                    ))}
+                  {globalFieldDefs.filter((f) => hasMeaningfulValue(submittedFormData[f.id])).length === 0 && (
+                    <div className="text-sm text-muted-foreground">No global fields recorded.</div>
+                  )}
+                </div>
+              </div>
+
+              <Separator />
+
+              <div className="space-y-3">
+                <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Sub-category</div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {subCategoryFieldDefs
+                    .filter((f) => hasMeaningfulValue(submittedFormData[f.id]))
+                    .map((f) => (
+                      <div key={f.id} className="rounded-md border bg-muted/30 p-3">
+                        <div className="text-xs text-muted-foreground">{f.label}</div>
+                        <div className="text-sm mt-1 break-words">{renderValue(submittedFormData[f.id])}</div>
+                      </div>
+                    ))}
+                  {subCategoryFieldDefs.filter((f) => hasMeaningfulValue(submittedFormData[f.id])).length === 0 && (
+                    <div className="text-sm text-muted-foreground">No sub-category fields recorded.</div>
+                  )}
+                </div>
               </div>
             </CardContent>
           </Card>

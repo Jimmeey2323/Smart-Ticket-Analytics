@@ -1,8 +1,9 @@
 import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { verifySupabaseAuth, optionalSupabaseAuth, setupSupabaseAuth } from "./supabaseAuth";
+import { verifySupabaseAuth, optionalSupabaseAuth, setupSupabaseAuth, authAdmin } from "./supabaseAuth";
 import { seedDatabase } from "./seed";
+import { momence } from "./momence";
 import OpenAI from "openai";
 
 // Initialize OpenAI only when an API key is provided. In development
@@ -18,10 +19,115 @@ if (process.env.OPENAI_API_KEY) {
   throw new Error("OPENAI_API_KEY must be set in production. Set SKIP_OPENAI=1 to bypass in development.");
 }
 
+type TitleSuggestInput = {
+  categoryName?: string | null;
+  subCategoryName?: string | null;
+  issueType?: string | null;
+  clientName?: string | null;
+  locationName?: string | null;
+  incidentDateTime?: string | null;
+  description?: string | null;
+  formData?: Record<string, unknown> | null;
+};
+
+const compact = (s: unknown): string => String(s ?? '').replace(/\s+/g, ' ').trim();
+
+const getFormValueByLabel = (formData: Record<string, unknown> | null | undefined, label: string): string => {
+  if (!formData) return '';
+  const want = label.trim().toLowerCase();
+  const key = Object.keys(formData).find((k) => k.trim().toLowerCase() === want);
+  if (!key) return '';
+  return compact((formData as any)[key]);
+};
+
+const fallbackTicketTitle = (input: TitleSuggestInput): string => {
+  const issueType = compact(input.issueType) || getFormValueByLabel(input.formData ?? null, 'Issue Type');
+  const client = compact(input.clientName);
+  const location = compact(input.locationName);
+  const category = compact(input.categoryName);
+  const sub = compact(input.subCategoryName);
+
+  const parts: string[] = [];
+  parts.push(issueType || sub || category || 'Support Ticket');
+  if (client) parts.push(client);
+  if (location) parts.push(location);
+
+  const title = parts.filter(Boolean).join(' — ');
+  return title.length > 120 ? title.slice(0, 117) + '...' : title;
+};
+
+const suggestTicketTitle = async (input: TitleSuggestInput): Promise<string> => {
+  if (!openai) return fallbackTicketTitle(input);
+
+  const payload = {
+    category: compact(input.categoryName),
+    subCategory: compact(input.subCategoryName),
+    issueType: compact(input.issueType) || getFormValueByLabel(input.formData ?? null, 'Issue Type'),
+    clientName: compact(input.clientName),
+    location: compact(input.locationName),
+    incidentDateTime: compact(input.incidentDateTime),
+    description: compact(input.description),
+  };
+
+  try {
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      temperature: 0.2,
+      messages: [
+        {
+          role: 'system',
+          content:
+            'You write concise customer support ticket titles. Return ONLY the title text (no quotes). Keep it <= 90 characters. Make it specific and operational.',
+        },
+        {
+          role: 'user',
+          content: JSON.stringify(payload),
+        },
+      ],
+    });
+
+    const title = compact(response.choices?.[0]?.message?.content);
+    return title || fallbackTicketTitle(input);
+  } catch (err) {
+    console.error('OpenAI title suggestion failed, using fallback:', err);
+    return fallbackTicketTitle(input);
+  }
+};
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
+
+  const requireAdminOrManager = async (req: Request, res: Response): Promise<boolean> => {
+    const userId = (req as any).supabaseUser?.id;
+    if (!userId) {
+      res.status(401).json({ message: "Unauthorized" });
+      return false;
+    }
+    const actor = await storage.getUser(userId);
+    const ok = actor?.role === 'admin' || actor?.role === 'manager';
+    if (!ok) {
+      res.status(403).json({ message: "Forbidden" });
+      return false;
+    }
+    return true;
+  };
+
+  const requireAdmin = async (req: Request, res: Response): Promise<boolean> => {
+    const userId = (req as any).supabaseUser?.id;
+    if (!userId) {
+      res.status(401).json({ message: "Unauthorized" });
+      return false;
+    }
+    const actor = await storage.getUser(userId);
+    const ok = actor?.role === 'admin';
+    if (!ok) {
+      res.status(403).json({ message: "Forbidden" });
+      return false;
+    }
+    return true;
+  };
 
   // Setup Supabase authentication routes
   setupSupabaseAuth(app);
@@ -61,7 +167,81 @@ export async function registerRoutes(
     }
   });
 
+  // Momence proxy endpoints (authenticated). Keeps Momence secrets server-side.
+  app.get('/api/momence/customers/search', verifySupabaseAuth, async (req: Request, res: Response) => {
+    try {
+      if (!momence.isConfigured()) {
+        return res.json({ enabled: false, results: [] });
+      }
+
+      const q = String(req.query.query || '').trim();
+      if (q.length < 2) return res.json({ enabled: true, results: [] });
+
+      const results = await momence.searchCustomers(q);
+      res.json({ enabled: true, results });
+    } catch (error) {
+      console.error('Momence customer search error:', error);
+      res.status(500).json({ enabled: true, message: 'Momence search failed' });
+    }
+  });
+
+  app.get('/api/momence/customers/:id', verifySupabaseAuth, async (req: Request, res: Response) => {
+    try {
+      if (!momence.isConfigured()) {
+        return res.status(503).json({ enabled: false, message: 'Momence is not configured' });
+      }
+
+      const customer = await momence.getCustomerById(req.params.id);
+      if (!customer) return res.status(404).json({ enabled: true, message: 'Customer not found' });
+      res.json({ enabled: true, customer });
+    } catch (error) {
+      console.error('Momence get customer error:', error);
+      res.status(500).json({ enabled: true, message: 'Momence customer fetch failed' });
+    }
+  });
+
+  app.get('/api/momence/sessions/search', verifySupabaseAuth, async (req: Request, res: Response) => {
+    try {
+      if (!momence.isConfigured()) {
+        return res.json({ enabled: false, results: [] });
+      }
+      const q = String(req.query.query || '').trim();
+      if (q.length < 2) return res.json({ enabled: true, results: [] });
+
+      const results = await momence.searchSessionsByName(q, 2);
+      res.json({ enabled: true, results });
+    } catch (error) {
+      console.error('Momence session search error:', error);
+      res.status(500).json({ enabled: true, message: 'Momence session search failed' });
+    }
+  });
+
+  app.get('/api/momence/sessions/:id', verifySupabaseAuth, async (req: Request, res: Response) => {
+    try {
+      if (!momence.isConfigured()) {
+        return res.status(503).json({ enabled: false, message: 'Momence is not configured' });
+      }
+
+      const session = await momence.getSessionById(req.params.id);
+      if (!session) return res.status(404).json({ enabled: true, message: 'Session not found' });
+      res.json({ enabled: true, session });
+    } catch (error) {
+      console.error('Momence get session error:', error);
+      res.status(500).json({ enabled: true, message: 'Momence session fetch failed' });
+    }
+  });
+
   // Tickets CRUD
+  app.get("/api/tickets/next-number", verifySupabaseAuth, async (req: Request, res: Response) => {
+    try {
+      const ticketNumber = await storage.getNextTicketNumber();
+      res.json({ ticketNumber });
+    } catch (error) {
+      console.error("Error generating next ticket number:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   app.get("/api/tickets", verifySupabaseAuth, async (req: Request, res: Response) => {
     try {
       const { status, priority, categoryId, assigneeId, department, search, limit, offset } = req.query;
@@ -102,11 +282,44 @@ export async function registerRoutes(
         return res.status(401).json({ message: "Unauthorized" });
       }
 
-      const ticketData = {
+      const ticketData: any = {
         ...req.body,
         reportedById: userId,
         reportedDateTime: new Date(),
       };
+
+      // Auto-generate a better title when the client sends a generic one.
+      const incomingTitle = compact(ticketData.title);
+      const incomingDescription = compact(ticketData.description);
+      const isGenericTitle =
+        !incomingTitle ||
+        incomingTitle.toLowerCase() === 'new ticket' ||
+        (incomingDescription && incomingTitle === incomingDescription);
+
+      if (isGenericTitle) {
+        const categories = await storage.getCategories();
+        const categoryName = categories.find((c) => c.id === ticketData.categoryId)?.name ?? null;
+
+        let subCategoryName: string | null = null;
+        if (ticketData.categoryId && ticketData.subcategoryId) {
+          const subs = await storage.getSubcategories(String(ticketData.categoryId));
+          subCategoryName = subs.find((s) => s.id === ticketData.subcategoryId)?.name ?? null;
+        }
+
+        const formData = (ticketData.formData ?? {}) as Record<string, unknown>;
+        const issueType = getFormValueByLabel(formData, 'Issue Type');
+
+        ticketData.title = await suggestTicketTitle({
+          categoryName,
+          subCategoryName,
+          issueType,
+          clientName: compact(ticketData.clientName || formData['GLB-006']),
+          locationName: compact(formData['GLB-004']),
+          incidentDateTime: compact(ticketData.incidentDateTime || formData['GLB-003']),
+          description: incomingDescription || compact(formData['GLB-012']),
+          formData,
+        });
+      }
 
       const ticket = await storage.createTicket(ticketData);
       res.status(201).json(ticket);
@@ -138,6 +351,17 @@ export async function registerRoutes(
       const existingTicket = await storage.getTicket(req.params.id);
       if (!existingTicket) {
         return res.status(404).json({ message: "Ticket not found" });
+      }
+
+      // Only the assigned agent should update status.
+      // Allow admins/managers, and allow the original reporter as a fallback when unassigned.
+      const actor = await storage.getUser(userId);
+      const isPrivileged = actor?.role === 'admin' || actor?.role === 'manager';
+      const isAssignee = !!existingTicket.assigneeId && existingTicket.assigneeId === userId;
+      const isReporter = existingTicket.reportedById === userId;
+
+      if (!isPrivileged && !isAssignee && !isReporter) {
+        return res.status(403).json({ message: "Only the assigned agent can change status" });
       }
 
       const updates: any = { status };
@@ -323,6 +547,407 @@ export async function registerRoutes(
       res.json(users);
     } catch (error) {
       console.error("Error fetching users:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Field groups for dynamic form section headers
+  app.get("/api/field-groups", verifySupabaseAuth, async (req: Request, res: Response) => {
+    try {
+      const { categoryId, subcategoryId } = req.query;
+      const groups = await storage.getFieldGroups({
+        categoryId: (categoryId as string) || undefined,
+        subcategoryId: (subcategoryId as string) || undefined,
+      });
+      res.json(groups);
+    } catch (error) {
+      console.error("Error fetching field groups:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Admin: Form builder settings (global + persistent)
+  app.get('/api/admin/users', verifySupabaseAuth, async (req: Request, res: Response) => {
+    try {
+      if (!(await requireAdmin(req, res))) return;
+      const users = await storage.getAllUsers();
+      res.json(users);
+    } catch (error) {
+      console.error('Error fetching admin users:', error);
+      res.status(500).json({ message: 'Internal server error' });
+    }
+  });
+
+  app.post('/api/admin/users', verifySupabaseAuth, async (req: Request, res: Response) => {
+    try {
+      if (!(await requireAdmin(req, res))) return;
+
+      const email = String(req.body?.email ?? '').trim();
+      const password = String(req.body?.password ?? '').trim();
+      const firstName = String(req.body?.firstName ?? '').trim();
+      const lastName = String(req.body?.lastName ?? '').trim();
+      const role = String(req.body?.role ?? 'support_staff').trim();
+      const department = (req.body?.department ?? null) as any;
+      const isActive = req.body?.isActive === undefined ? true : Boolean(req.body?.isActive);
+
+      if (!email) return res.status(400).json({ message: 'Email is required' });
+
+      const fullName = String(`${firstName} ${lastName}`).trim() || email;
+
+      // If this email already exists in our DB, update that record instead of
+      // attempting to insert a duplicate (users.email is unique).
+      const existingByEmail = await storage.getUserByEmail(email);
+
+      // Create the Supabase Auth user if possible; otherwise fail loudly because they asked for true user creation.
+      const metadata = { first_name: firstName, last_name: lastName, full_name: fullName };
+
+      let createdUserId: string | null = null;
+      try {
+        if (password) {
+          const data = await authAdmin.createUser(email, password, metadata);
+          createdUserId = (data as any)?.user?.id ?? null;
+        } else {
+          const data = await authAdmin.inviteUserByEmail(email, metadata);
+          createdUserId = (data as any)?.user?.id ?? null;
+        }
+      } catch (e: any) {
+        return res.status(400).json({ message: String(e?.message || e) });
+      }
+
+      if (!createdUserId) return res.status(500).json({ message: 'Failed to create auth user' });
+
+      const saved = existingByEmail && existingByEmail.id !== createdUserId
+        ? await storage.ensureUserIdForEmail({
+            id: createdUserId,
+            email,
+            firstName,
+            lastName,
+            fullName,
+            profileImageUrl: null,
+            role: role as any,
+            department,
+            isActive,
+          })
+        : await storage.upsertUser({
+            id: createdUserId,
+            email,
+            firstName,
+            lastName,
+            fullName,
+            profileImageUrl: existingByEmail?.profileImageUrl ?? null,
+            role: role as any,
+            department,
+            isActive,
+          } as any);
+
+      res.status(201).json(saved);
+    } catch (error) {
+      console.error('Error creating user:', error);
+      res.status(500).json({ message: 'Internal server error' });
+    }
+  });
+
+  app.patch('/api/admin/users/:id', verifySupabaseAuth, async (req: Request, res: Response) => {
+    try {
+      if (!(await requireAdmin(req, res))) return;
+      const id = String(req.params.id || '').trim();
+      if (!id) return res.status(400).json({ message: 'Missing user id' });
+
+      const existing = await storage.getUser(id);
+      if (!existing) return res.status(404).json({ message: 'User not found' });
+
+      const nextFirstName = req.body?.firstName !== undefined ? String(req.body.firstName ?? '').trim() : existing.firstName;
+      const nextLastName = req.body?.lastName !== undefined ? String(req.body.lastName ?? '').trim() : existing.lastName;
+      const nextEmail = req.body?.email !== undefined ? String(req.body.email ?? '').trim() : existing.email;
+      const nextFullName = String(`${nextFirstName || ''} ${nextLastName || ''}`).trim() || existing.fullName || nextEmail || '';
+
+      const nextRole = req.body?.role !== undefined ? String(req.body.role ?? existing.role) : existing.role;
+      const nextDepartment = req.body?.department !== undefined ? (req.body.department ?? null) : existing.department;
+      const nextIsActive = req.body?.isActive !== undefined ? Boolean(req.body.isActive) : existing.isActive;
+
+      // Update Supabase auth metadata when service-role is configured.
+      try {
+        await authAdmin.updateUser(id, {
+          email: nextEmail,
+          user_metadata: { first_name: nextFirstName, last_name: nextLastName, full_name: nextFullName },
+        });
+      } catch {
+        // Ignore if service role isn't configured; DB updates still apply.
+      }
+
+      const saved = await storage.upsertUser({
+        ...existing,
+        email: nextEmail,
+        firstName: nextFirstName,
+        lastName: nextLastName,
+        fullName: nextFullName,
+        role: nextRole as any,
+        department: nextDepartment as any,
+        isActive: nextIsActive,
+      } as any);
+
+      res.json(saved);
+    } catch (error) {
+      console.error('Error updating user:', error);
+      res.status(500).json({ message: 'Internal server error' });
+    }
+  });
+
+  app.patch('/api/admin/subcategories/:id', verifySupabaseAuth, async (req: Request, res: Response) => {
+    try {
+      if (!(await requireAdminOrManager(req, res))) return;
+      const id = String(req.params.id || '').trim();
+      if (!id) return res.status(400).json({ message: 'Missing subcategory id' });
+
+      const formFields = req.body?.formFields;
+      if (formFields === undefined) return res.status(400).json({ message: 'formFields is required' });
+
+      const saved = await storage.updateSubcategoryFormFields(id, formFields);
+      if (!saved) return res.status(404).json({ message: 'Subcategory not found' });
+      res.json(saved);
+    } catch (error) {
+      console.error('Error updating subcategory form fields:', error);
+      res.status(500).json({ message: 'Internal server error' });
+    }
+  });
+
+  // Admin: Categories + Subcategories
+  app.post('/api/admin/categories', verifySupabaseAuth, async (req: Request, res: Response) => {
+    try {
+      if (!(await requireAdminOrManager(req, res))) return;
+
+      const name = String(req.body?.name ?? '').trim();
+      if (!name) return res.status(400).json({ message: 'name is required' });
+
+      const payload: any = {
+        name,
+        description: req.body?.description ?? null,
+        icon: req.body?.icon ?? null,
+        color: req.body?.color ?? null,
+        defaultDepartment: req.body?.defaultDepartment ?? null,
+        isActive: req.body?.isActive === undefined ? true : Boolean(req.body?.isActive),
+      };
+
+      const created = await storage.createCategory(payload);
+      res.status(201).json(created);
+    } catch (error: any) {
+      console.error('Error creating category:', error);
+      // Likely uniqueness violation; surface as 400 to keep UX simple.
+      res.status(400).json({ message: String(error?.message || 'Failed to create category') });
+    }
+  });
+
+  app.patch('/api/admin/categories/:id', verifySupabaseAuth, async (req: Request, res: Response) => {
+    try {
+      if (!(await requireAdminOrManager(req, res))) return;
+      const id = String(req.params.id || '').trim();
+      if (!id) return res.status(400).json({ message: 'Missing category id' });
+
+      const updates: any = {};
+      if (req.body?.name !== undefined) {
+        const nextName = String(req.body?.name ?? '').trim();
+        if (!nextName) return res.status(400).json({ message: 'name cannot be empty' });
+        updates.name = nextName;
+      }
+      if (req.body?.description !== undefined) updates.description = req.body?.description ?? null;
+      if (req.body?.icon !== undefined) updates.icon = req.body?.icon ?? null;
+      if (req.body?.color !== undefined) updates.color = req.body?.color ?? null;
+      if (req.body?.defaultDepartment !== undefined) updates.defaultDepartment = req.body?.defaultDepartment ?? null;
+      if (req.body?.isActive !== undefined) updates.isActive = Boolean(req.body?.isActive);
+
+      const saved = await storage.updateCategory(id, updates);
+      if (!saved) return res.status(404).json({ message: 'Category not found' });
+      res.json(saved);
+    } catch (error: any) {
+      console.error('Error updating category:', error);
+      res.status(400).json({ message: String(error?.message || 'Failed to update category') });
+    }
+  });
+
+  app.post('/api/admin/categories/:id/subcategories', verifySupabaseAuth, async (req: Request, res: Response) => {
+    try {
+      if (!(await requireAdminOrManager(req, res))) return;
+      const categoryId = String(req.params.id || '').trim();
+      if (!categoryId) return res.status(400).json({ message: 'Missing category id' });
+
+      const name = String(req.body?.name ?? '').trim();
+      if (!name) return res.status(400).json({ message: 'name is required' });
+
+      const created = await storage.createSubcategory({
+        categoryId,
+        name,
+        description: req.body?.description ?? null,
+        defaultDepartment: req.body?.defaultDepartment ?? null,
+        isActive: req.body?.isActive === undefined ? true : Boolean(req.body?.isActive),
+        formFields: req.body?.formFields ?? { fields: [] },
+      } as any);
+
+      res.status(201).json(created);
+    } catch (error: any) {
+      console.error('Error creating subcategory:', error);
+      res.status(400).json({ message: String(error?.message || 'Failed to create subcategory') });
+    }
+  });
+
+  app.patch('/api/admin/subcategories/:id/meta', verifySupabaseAuth, async (req: Request, res: Response) => {
+    try {
+      if (!(await requireAdminOrManager(req, res))) return;
+      const id = String(req.params.id || '').trim();
+      if (!id) return res.status(400).json({ message: 'Missing subcategory id' });
+
+      const updates: any = {};
+      if (req.body?.name !== undefined) {
+        const nextName = String(req.body?.name ?? '').trim();
+        if (!nextName) return res.status(400).json({ message: 'name cannot be empty' });
+        updates.name = nextName;
+      }
+      if (req.body?.description !== undefined) updates.description = req.body?.description ?? null;
+      if (req.body?.defaultDepartment !== undefined) updates.defaultDepartment = req.body?.defaultDepartment ?? null;
+      if (req.body?.isActive !== undefined) updates.isActive = Boolean(req.body?.isActive);
+
+      const saved = await storage.updateSubcategory(id, updates);
+      if (!saved) return res.status(404).json({ message: 'Subcategory not found' });
+      res.json(saved);
+    } catch (error: any) {
+      console.error('Error updating subcategory meta:', error);
+      res.status(400).json({ message: String(error?.message || 'Failed to update subcategory') });
+    }
+  });
+
+  app.get("/api/admin/form-fields", verifySupabaseAuth, async (req: Request, res: Response) => {
+    try {
+      if (!(await requireAdminOrManager(req, res))) return;
+      const fields = await storage.getFormFields();
+      res.json(fields);
+    } catch (error) {
+      console.error("Error fetching form fields:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.post("/api/admin/form-fields", verifySupabaseAuth, async (req: Request, res: Response) => {
+    try {
+      if (!(await requireAdminOrManager(req, res))) return;
+      const saved = await storage.upsertFormField(req.body);
+      res.status(201).json(saved);
+    } catch (error) {
+      console.error("Error creating form field:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.patch("/api/admin/form-fields/:id", verifySupabaseAuth, async (req: Request, res: Response) => {
+    try {
+      if (!(await requireAdminOrManager(req, res))) return;
+      const saved = await storage.upsertFormField({ ...req.body, id: req.params.id });
+      res.json(saved);
+    } catch (error) {
+      console.error("Error updating form field:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.delete("/api/admin/form-fields/:id", verifySupabaseAuth, async (req: Request, res: Response) => {
+    try {
+      if (!(await requireAdminOrManager(req, res))) return;
+      const ok = await storage.deleteFormField(req.params.id);
+      if (!ok) return res.status(404).json({ message: "Not found" });
+      res.status(204).send();
+    } catch (error) {
+      console.error("Error deleting form field:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.get("/api/admin/field-groups", verifySupabaseAuth, async (req: Request, res: Response) => {
+    try {
+      if (!(await requireAdminOrManager(req, res))) return;
+      const groups = await storage.getFieldGroups({
+        categoryId: (req.query.categoryId as string) || undefined,
+        subcategoryId: (req.query.subcategoryId as string) || undefined,
+      });
+      res.json(groups);
+    } catch (error) {
+      console.error("Error fetching field groups:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.post("/api/admin/field-groups", verifySupabaseAuth, async (req: Request, res: Response) => {
+    try {
+      if (!(await requireAdminOrManager(req, res))) return;
+      const saved = await storage.upsertFieldGroup(req.body);
+      res.status(201).json(saved);
+    } catch (error) {
+      console.error("Error creating field group:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.patch("/api/admin/field-groups/:id", verifySupabaseAuth, async (req: Request, res: Response) => {
+    try {
+      if (!(await requireAdminOrManager(req, res))) return;
+      const saved = await storage.upsertFieldGroup({ ...req.body, id: req.params.id });
+      res.json(saved);
+    } catch (error) {
+      console.error("Error updating field group:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.delete("/api/admin/field-groups/:id", verifySupabaseAuth, async (req: Request, res: Response) => {
+    try {
+      if (!(await requireAdminOrManager(req, res))) return;
+      const ok = await storage.deleteFieldGroup(req.params.id);
+      if (!ok) return res.status(404).json({ message: "Not found" });
+      res.status(204).send();
+    } catch (error) {
+      console.error("Error deleting field group:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.get("/api/admin/assignment-rules", verifySupabaseAuth, async (req: Request, res: Response) => {
+    try {
+      if (!(await requireAdminOrManager(req, res))) return;
+      const rules = await storage.getAssignmentRules();
+      res.json(rules);
+    } catch (error) {
+      console.error("Error fetching assignment rules:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.post("/api/admin/assignment-rules", verifySupabaseAuth, async (req: Request, res: Response) => {
+    try {
+      if (!(await requireAdminOrManager(req, res))) return;
+      const saved = await storage.upsertAssignmentRule(req.body);
+      res.status(201).json(saved);
+    } catch (error) {
+      console.error("Error creating assignment rule:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.patch("/api/admin/assignment-rules/:id", verifySupabaseAuth, async (req: Request, res: Response) => {
+    try {
+      if (!(await requireAdminOrManager(req, res))) return;
+      const saved = await storage.upsertAssignmentRule({ ...req.body, id: req.params.id });
+      res.json(saved);
+    } catch (error) {
+      console.error("Error updating assignment rule:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.delete("/api/admin/assignment-rules/:id", verifySupabaseAuth, async (req: Request, res: Response) => {
+    try {
+      if (!(await requireAdminOrManager(req, res))) return;
+      const ok = await storage.deleteAssignmentRule(req.params.id);
+      if (!ok) return res.status(404).json({ message: "Not found" });
+      res.status(204).send();
+    } catch (error) {
+      console.error("Error deleting assignment rule:", error);
       res.status(500).json({ message: "Internal server error" });
     }
   });

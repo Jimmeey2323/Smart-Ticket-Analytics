@@ -1,7 +1,10 @@
-import { useState } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useEffect, useMemo, useState } from "react";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { ArrowLeft, Sparkles } from "lucide-react";
@@ -9,14 +12,123 @@ import { CategorySelector } from "@/components/category-selector";
 import { DynamicForm } from "@/components/dynamic-form";
 import { FieldDefinition, TicketFormData } from "@shared/ticket-schema";
 import type { Ticket } from "@shared/schema";
+import { useAuth } from "@/hooks/useAuth";
+import { FIELD_DEFINITIONS } from "@shared/field-definitions";
+import { AnimatePresence, motion } from "framer-motion";
 
 export default function CreateTicket() {
-  const [, navigate] = useLocation();
+  const [location, navigate] = useLocation();
   const { toast } = useToast();
+  const { user } = useAuth();
   const [selectedCategory, setSelectedCategory] = useState<string>('');
   const [selectedSubCategory, setSelectedSubCategory] = useState<string>('');
+  const [selectedCategoryName, setSelectedCategoryName] = useState<string>('');
+  const [selectedSubCategoryName, setSelectedSubCategoryName] = useState<string>('');
   const [formFields, setFormFields] = useState<FieldDefinition[]>([]);
+    const mergedFormFields: FieldDefinition[] = useMemo(() => {
+      const essentialGlobalIds = new Set([
+        'GLB-001',
+        'GLB-002',
+        'GLB-003',
+        'GLB-004',
+        'GLB-005',
+        'GLB-006',
+        'GLB-007',
+        'GLB-008',
+        'GLB-009',
+        'GLB-010',
+        'GLB-011',
+        'GLB-012',
+        'GLB-013',
+        'GLB-014',
+        'GLB-015',
+        'GLB-016',
+      ]);
+
+      const globals = FIELD_DEFINITIONS.filter((f) => essentialGlobalIds.has(f.id));
+      const systemFields: FieldDefinition[] = [
+        {
+          id: 'Assigned To',
+          label: 'Assigned To',
+          fieldType: 'Dropdown' as any,
+          options: [],
+          isRequired: false,
+          isHidden: false,
+          category: 'Global' as any,
+          subCategory: 'Global' as any,
+        } as any,
+        {
+          id: 'Status',
+          label: 'Status',
+          fieldType: 'Dropdown' as any,
+          options: ['Open', 'In Progress', 'Pending', 'Resolved', 'Closed', 'Escalated'],
+          isRequired: false,
+          isHidden: false,
+          category: 'Global' as any,
+          subCategory: 'Global' as any,
+        } as any,
+      ];
+
+      const all = [...globals, ...systemFields, ...formFields];
+      return Array.from(new Map(all.map((f) => [f.id, f])).values());
+    }, [formFields]);
+
   const [showForm, setShowForm] = useState(false);
+  const [isAutoSelectingTemplate, setIsAutoSelectingTemplate] = useState(false);
+  const [reportedAtIso, setReportedAtIso] = useState<string>('');
+
+  // Allow deep-links (e.g. from Templates page) to preselect category/subcategory.
+  useEffect(() => {
+    if (showForm) return;
+
+    const queryIndex = location.indexOf('?');
+    if (queryIndex === -1) return;
+
+    const search = location.slice(queryIndex + 1);
+    const params = new URLSearchParams(search);
+
+    const categoryId = (params.get('categoryId') || params.get('category') || '').trim();
+    const subcategoryId = (params.get('subcategoryId') || params.get('subCategoryId') || params.get('subCategory') || '').trim();
+
+    if (categoryId && !selectedCategory) setSelectedCategory(categoryId);
+    if (subcategoryId && !selectedSubCategory) setSelectedSubCategory(subcategoryId);
+
+    // If both values are present, treat it as a template deep-link and avoid
+    // showing the category-selection UI.
+    setIsAutoSelectingTemplate(Boolean(categoryId && subcategoryId));
+  }, [location, selectedCategory, selectedSubCategory, showForm]);
+
+  useEffect(() => {
+    if (showForm && isAutoSelectingTemplate) setIsAutoSelectingTemplate(false);
+  }, [showForm, isAutoSelectingTemplate]);
+
+  const { data: locations = [] } = useQuery<any[]>({
+    queryKey: ['/api/locations'],
+    enabled: showForm,
+  });
+
+  const { data: nextTicketNumber } = useQuery<{ ticketNumber: string }>({
+    queryKey: ['/api/tickets/next-number'],
+    enabled: showForm,
+  });
+
+  const { data: fieldGroups = [] } = useQuery<any[]>({
+    queryKey: ['/api/field-groups', selectedCategory, selectedSubCategory],
+    enabled: showForm && !!selectedCategory,
+    queryFn: async () => {
+      const res = await apiRequest('GET', `/api/field-groups?categoryId=${encodeURIComponent(selectedCategory)}&subcategoryId=${encodeURIComponent(selectedSubCategory)}`);
+      return res.json();
+    },
+  });
+
+  useEffect(() => {
+    if (showForm && !reportedAtIso) {
+      setReportedAtIso(new Date().toISOString());
+    }
+    if (!showForm && reportedAtIso) {
+      setReportedAtIso('');
+    }
+  }, [showForm, reportedAtIso]);
 
   const createTicketMutation = useMutation({
     mutationFn: async (ticketData: any) => {
@@ -26,7 +138,7 @@ export default function CreateTicket() {
     onSuccess: (data) => {
       toast({
         title: "Ticket Created Successfully! ✨",
-        description: `Ticket #${data.id} has been created and assigned.`,
+        description: `Ticket ${data.ticketNumber ?? `#${data.id}`} has been created and assigned.`,
       });
       queryClient.invalidateQueries({ queryKey: ['tickets'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
@@ -41,14 +153,57 @@ export default function CreateTicket() {
     },
   });
 
-  const handleCategorySelect = (categoryId: string, subCategoryId: string, fields: FieldDefinition[]) => {
+  const handleCategorySelect = (
+    categoryId: string,
+    subCategoryId: string,
+    fields: FieldDefinition[],
+    meta?: { categoryName?: string; subCategoryName?: string }
+  ) => {
     setSelectedCategory(categoryId);
     setSelectedSubCategory(subCategoryId);
+    setSelectedCategoryName(meta?.categoryName ?? categoryId);
+    setSelectedSubCategoryName(meta?.subCategoryName ?? subCategoryId);
     setFormFields(fields);
     setShowForm(true);
   };
 
   const handleFormSubmit = (formData: TicketFormData) => {
+    const mapDepartmentValue = (departmentOption: string): string | null => {
+      const s = String(departmentOption || '').trim().toLowerCase();
+      if (!s) return null;
+      if (s.includes('operations')) return 'operations';
+      if (s.includes('facilities')) return 'facilities';
+      if (s.includes('training')) return 'training';
+      if (s.includes('sales')) return 'sales';
+      if (s.includes('client success')) return 'client_success';
+      if (s.includes('marketing')) return 'marketing';
+      if (s.includes('finance')) return 'finance';
+      if (s.includes('management')) return 'management';
+      return null;
+    };
+
+    const locationName = String(formData['GLB-004'] || '').trim();
+    const locationId = locations.find((l) => String(l?.name || '').trim() === locationName)?.id ?? null;
+
+    const mapStatusValue = (statusOption: string): string | undefined => {
+      const s = String(statusOption || '').trim().toLowerCase();
+      if (!s) return undefined;
+      if (s === 'open') return 'open';
+      if (s === 'in progress' || s === 'in_progress') return 'in_progress';
+      if (s === 'pending') return 'pending';
+      if (s === 'resolved') return 'resolved';
+      if (s === 'closed') return 'closed';
+      if (s === 'escalated') return 'escalated';
+      return undefined;
+    };
+
+    const assignedValue = String((formData as any)['Assigned To'] ?? '').trim();
+    const assigneeId = !assignedValue || assignedValue === '__UNASSIGNED__' ? null : assignedValue;
+    const status = mapStatusValue(String((formData as any)['Status'] ?? ''));
+
+    const followUps = Array.isArray((formData as any).__followUps) ? (formData as any).__followUps : [];
+    const firstFollowUpDate = followUps.find((fu: any) => String(fu?.date ?? '').trim())?.date;
+
     // Transform the form data into the ticket format
     const ticketData = {
       ...formData,
@@ -60,10 +215,17 @@ export default function CreateTicket() {
       clientName: formData['GLB-006'] || '',
       clientEmail: formData['GLB-007'] || '',
       clientPhone: formData['GLB-008'] || '',
+      clientStatus: formData['GLB-009'] || '',
+      clientMood: formData['GLB-014'] || '',
       priority: mapPriorityValue(formData['GLB-010']) || 'medium',
-      location: formData['GLB-004'] || '',
-      department: formData['GLB-011'] || '',
-      followUpRequired: formData['GLB-015'] || false,
+      department: mapDepartmentValue(formData['GLB-011']) || undefined,
+      locationId,
+      incidentDateTime: formData['GLB-003'] ? new Date(String(formData['GLB-003'])).toISOString() : undefined,
+      actionTakenImmediately: formData['GLB-013'] || '',
+      followUpRequired: Boolean((formData as any)['GLB-015'] === true || (formData as any)['GLB-015'] === 'true'),
+      followUpDate: firstFollowUpDate ? new Date(String(firstFollowUpDate)).toISOString() : undefined,
+      assigneeId,
+      status,
       formData: formData // Store all form data for reference
     };
 
@@ -81,11 +243,57 @@ export default function CreateTicket() {
     return 'medium';
   };
 
+  const initialFormData: TicketFormData = useMemo(() => {
+    const first = String((user as any)?.firstName ?? '').trim();
+    const last = String((user as any)?.lastName ?? '').trim();
+    const displayName = `${first} ${last}`.trim() || String((user as any)?.email ?? '').trim() || '';
+    return {
+      // Preview Ticket ID (server-generated)
+      'GLB-001': nextTicketNumber?.ticketNumber ?? '',
+      // Auto-populated
+      'GLB-002': reportedAtIso || new Date().toISOString(),
+      'GLB-005': displayName,
+      // Defaults
+      'GLB-010': 'Medium (48hrs)',
+      'Assigned To': '__UNASSIGNED__' as any,
+      'Status': 'Open' as any,
+    };
+  }, [user, nextTicketNumber?.ticketNumber, reportedAtIso]);
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-violet-50 via-white to-purple-50">
-      <div className="container mx-auto py-8 px-4">
-        <div className="flex items-center justify-between mb-8">
-          <div className="flex items-center space-x-4">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
+      <div className="container mx-auto py-8 px-4 max-w-7xl">
+        {/* Main Container with Box Border */}
+        <div className="bg-white/50 backdrop-blur-xl rounded-2xl border-2 border-white/60 shadow-2xl p-8">
+          {/* Centered Animated Header */}
+          <motion.div 
+            className="text-center mb-10"
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6 }}
+          >
+            <motion.div
+              className="inline-flex items-center justify-center w-16 h-16 mb-4 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 shadow-lg"
+              animate={{ 
+                rotate: [0, 10, -10, 0],
+                scale: [1, 1.05, 1]
+              }}
+              transition={{ 
+                duration: 3,
+                repeat: Infinity,
+                ease: "easeInOut"
+              }}
+            >
+              <Sparkles className="w-8 h-8 text-white" />
+            </motion.div>
+            <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 bg-clip-text text-transparent mb-2">
+              Create New Ticket
+            </h1>
+            <p className="text-gray-600 text-sm">Select a category and fill in the details to submit your ticket</p>
+          </motion.div>
+
+          {/* Navigation Button */}
+          <div className="mb-8">
             <Button 
               variant="ghost" 
               size="sm" 
@@ -95,48 +303,121 @@ export default function CreateTicket() {
               <ArrowLeft className="w-4 h-4 mr-2" />
               Back to Tickets
             </Button>
-            <div className="flex items-center space-x-2">
-              <Sparkles className="w-6 h-6 text-violet-600" />
-              <h1 className="text-3xl font-bold bg-gradient-to-r from-violet-600 to-purple-600 bg-clip-text text-transparent">
-                Create New Ticket
-              </h1>
-            </div>
           </div>
-        </div>
 
-        {!showForm ? (
-          <CategorySelector
-            onCategorySelect={handleCategorySelect}
-            selectedCategory={selectedCategory}
-            selectedSubCategory={selectedSubCategory}
-          />
-        ) : (
-          <div className="space-y-6">
-            <div className="flex items-center justify-between">
-              <Button 
-                variant="ghost" 
-                size="sm" 
-                onClick={() => setShowForm(false)}
-                className="hover:bg-white/80 backdrop-blur-sm"
+          {/* Progress Indicator */}
+          <div className="mb-8 flex items-center justify-center gap-3">
+            <motion.div 
+              className="flex items-center gap-2"
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: 0.2 }}
+            >
+              <Badge 
+                variant={!showForm ? "default" : "secondary"}
+                className={`${!showForm ? 'bg-gradient-to-r from-blue-500 to-indigo-600' : ''} text-sm px-3 py-1`}
               >
-                <ArrowLeft className="w-4 h-4 mr-2" />
-                Change Category
-              </Button>
-              <div className="text-sm text-gray-600">
-                Category: <span className="font-medium">{selectedCategory}</span> → 
-                <span className="font-medium"> {selectedSubCategory}</span>
-              </div>
-            </div>
-
-            <DynamicForm
-              fields={formFields}
-              onSubmit={handleFormSubmit}
-              isLoading={createTicketMutation.isPending}
-              title="Create Ticket"
-              description="Fill in the details below to create your ticket. Required fields are marked with an asterisk."
-            />
+                1
+              </Badge>
+              <span className="font-medium text-gray-700">Choose category</span>
+            </motion.div>
+            <span className="px-2 text-gray-400">→</span>
+            <motion.div 
+              className="flex items-center gap-2"
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: 0.3 }}
+            >
+              <Badge 
+                variant={showForm ? "default" : "secondary"}
+                className={`${showForm ? 'bg-gradient-to-r from-blue-500 to-indigo-600' : ''} text-sm px-3 py-1`}
+              >
+                2
+              </Badge>
+              <span className="font-medium text-gray-700">Fill details</span>
+            </motion.div>
           </div>
-        )}
+
+        <AnimatePresence mode="wait" initial={false}>
+          {!showForm ? (
+            <motion.div
+              key="category-selector"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              transition={{ duration: 0.2 }}
+            >
+              {isAutoSelectingTemplate ? (
+                <div className="space-y-4">
+                  {/* Mount CategorySelector offscreen to compute fields & trigger auto-selection */}
+                  <div className="hidden">
+                    <CategorySelector
+                      onCategorySelect={handleCategorySelect}
+                      selectedCategory={selectedCategory}
+                      selectedSubCategory={selectedSubCategory}
+                    />
+                  </div>
+
+                  <Card className="max-w-3xl mx-auto">
+                    <CardHeader>
+                      <CardTitle>Loading template…</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      <Skeleton className="h-5 w-64" />
+                      <Skeleton className="h-4 w-full" />
+                      <Skeleton className="h-4 w-5/6" />
+                    </CardContent>
+                  </Card>
+                </div>
+              ) : (
+                <CategorySelector
+                  onCategorySelect={handleCategorySelect}
+                  selectedCategory={selectedCategory}
+                  selectedSubCategory={selectedSubCategory}
+                />
+              )}
+            </motion.div>
+          ) : (
+            <motion.div
+              key="ticket-form"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              transition={{ duration: 0.2 }}
+              className="space-y-6"
+            >
+              <div className="flex items-center justify-between">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowForm(false)}
+                  className="hover:bg-white/80 backdrop-blur-sm"
+                >
+                  <ArrowLeft className="w-4 h-4 mr-2" />
+                  Change Category
+                </Button>
+                <div className="text-sm text-muted-foreground">
+                  <span className="font-medium text-foreground">{selectedCategoryName || selectedCategory}</span>
+                  <span className="px-1">→</span>
+                  <span className="font-medium text-foreground">{selectedSubCategoryName || selectedSubCategory}</span>
+                </div>
+              </div>
+
+              <DynamicForm
+                fields={mergedFormFields}
+                onSubmit={handleFormSubmit}
+                initialData={initialFormData}
+                isLoading={createTicketMutation.isPending}
+                title="Create Ticket"
+                description="Fill in the details below to create your ticket. Required fields are marked with an asterisk."
+                mode="create"
+                fieldGroups={fieldGroups}
+                context={{ categoryName: selectedCategoryName, subCategoryName: selectedSubCategoryName }}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
+        </div>
       </div>
     </div>
   );
