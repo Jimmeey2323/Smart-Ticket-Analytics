@@ -152,9 +152,7 @@ export function AppSidebar() {
     <Sidebar className="border-r border-sidebar-border bg-sidebar/60 backdrop-blur-md shadow-lg">
       <SidebarHeader className="p-4">
         <div className="flex items-center gap-3">
-          <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-gradient-to-br from-sky-600 to-indigo-600 text-white font-extrabold text-lg shadow-sm">
-            P57
-          </div>
+          <img src="/logo.png" alt="Physique 57" className="h-12 w-12 object-contain rounded-lg" />
           <div className="flex flex-col">
             <span className="font-semibold text-base">Physique 57</span>
             <span className="text-xs text-muted-foreground">Ticket Management</span>

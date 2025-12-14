@@ -225,6 +225,7 @@ export default function CreateTicket() {
       followUpRequired: Boolean((formData as any)['GLB-015'] === true || (formData as any)['GLB-015'] === 'true'),
       followUpDate: firstFollowUpDate ? new Date(String(firstFollowUpDate)).toISOString() : undefined,
       assigneeId,
+      reportedById: user?.id,
       status,
       formData: formData // Store all form data for reference
     };

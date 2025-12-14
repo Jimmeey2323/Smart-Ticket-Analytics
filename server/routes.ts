@@ -282,10 +282,35 @@ export async function registerRoutes(
         return res.status(401).json({ message: "Unauthorized" });
       }
 
+      // Sanitize and prepare ticket data - only include actual ticket fields
       const ticketData: any = {
-        ...req.body,
+        categoryId: req.body.categoryId,
+        subcategoryId: req.body.subcategoryId,
+        clientName: req.body.clientName,
+        clientEmail: req.body.clientEmail,
+        clientPhone: req.body.clientPhone,
+        clientStatus: req.body.clientStatus,
+        clientMood: req.body.clientMood,
+        title: req.body.title,
+        description: req.body.description,
+        actionTakenImmediately: req.body.actionTakenImmediately,
+        locationId: req.body.locationId,
+        // Convert ISO string timestamps to Date objects if provided
+        incidentDateTime: req.body.incidentDateTime ? new Date(req.body.incidentDateTime) : undefined,
+        status: req.body.status,
+        priority: req.body.priority,
+        department: req.body.department,
+        assigneeId: req.body.assigneeId,
         reportedById: userId,
         reportedDateTime: new Date(),
+        isEscalated: req.body.isEscalated === true || req.body.isEscalated === 'true',
+        escalatedAt: req.body.escalatedAt ? new Date(req.body.escalatedAt) : undefined,
+        escalatedToId: req.body.escalatedToId,
+        escalationReason: req.body.escalationReason,
+        followUpRequired: req.body.followUpRequired === true || req.body.followUpRequired === 'true',
+        followUpDate: req.body.followUpDate ? new Date(req.body.followUpDate) : undefined,
+        attachmentsCount: req.body.attachmentsCount || 0,
+        formData: req.body.formData || {},
       };
 
       // Auto-generate a better title when the client sends a generic one.

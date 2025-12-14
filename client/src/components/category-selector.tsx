@@ -324,7 +324,7 @@ export const CategorySelector: React.FC<CategorySelectorProps> = ({
                         className="group relative cursor-pointer transition-all"
                       >
                         {/* Glassmorphic background */}
-                        <div className="absolute inset-0 rounded-lg bg-white/40 backdrop-blur-md border border-white/60 group-hover:bg-white/50 transition-all duration-300" />
+                        <div className="absolute inset-0 rounded-lg bg-muted/80 backdrop-blur-md border border-border group-hover:bg-muted transition-all duration-300" />
 
                         {/* Thick left colored border */}
                         <div
@@ -443,8 +443,8 @@ export const CategorySelector: React.FC<CategorySelectorProps> = ({
                         {/* Glassmorphic background - highlighted on selection */}
                         <div className={`absolute inset-0 rounded-lg transition-all duration-300 ${
                           isSubSelected 
-                            ? 'bg-white/60 border border-white/80' 
-                            : 'bg-white/40 border border-white/60 group-hover:bg-white/50'
+                            ? 'bg-muted border border-border' 
+                            : 'bg-muted/80 border border-border group-hover:bg-muted'
                         }`} />
 
                         {/* Thick left colored border */}
