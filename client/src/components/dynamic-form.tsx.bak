@@ -669,6 +669,28 @@ export const DynamicForm: React.FC<DynamicFormProps> = ({
     return 'issue_details';
   };
 
+  const SECTION_ORDER: Array<{ key: string; title: string; description?: string }> = [
+    { key: 'category_selection', title: 'Category Selection' },
+    { key: 'global', title: 'Ticket Information' },
+    { key: 'issue_details', title: 'Issue Details' },
+    { key: 'reporter_client', title: 'Reporter & Client' },
+    { key: 'timeline', title: 'Timeline' },
+    { key: 'location', title: 'Location' },
+    { key: 'operational', title: 'Operational Context' },
+    { key: 'actions', title: 'Actions & Resolution' },
+    { key: 'attachments', title: 'Attachments' },
+  };
+
+  const ORDER_WITHIN_SECTION: Record<string, string[]> = {
+    global: ['GLB-001', 'GLB-002', 'GLB-010', 'Issue Type', 'GLB-011', 'Assigned To', 'Status'],
+    issue_details: ['GLB-012', 'Check-in Issue Type', 'Check-in Issue'],
+    reporter_client: ['GLB-005', 'GLB-006', 'GLB-007', 'GLB-008', 'GLB-009', 'GLB-014'],
+    timeline: ['GLB-003', 'Class Date & Time', 'Class Details', 'Class Type'],
+    location: ['GLB-004'],
+    actions: ['GLB-013', 'GLB-015', 'Result'],
+    attachments: ['GLB-016'],
+  };
+
   const sectioned = useMemo(() => {
     const sections: Array<{ key: string; title: string; fields: FieldDefinition[] }> = [];
 
@@ -754,7 +776,7 @@ export const DynamicForm: React.FC<DynamicFormProps> = ({
       .filter((s) => s.fields.length > 0);
     
     return [...sections, ...formSections];
-  }, [visibleFields, shouldShowClientSection, fieldGroups, context]);
+  }, [visibleFields, shouldShowClientSection, fieldGroups, context?.subCategoryName, context?.showForm]);
 
   const validateField = (field: FieldDefinition, value: any): string | null => {
     // Skip required validation for read-only/auto fields in create mode
@@ -917,7 +939,7 @@ export const DynamicForm: React.FC<DynamicFormProps> = ({
     };
 
     const renderLabel = () => (
-      <Label htmlFor={field.id} className={`text-sm font-semibold ${disabled ? 'text-muted-foreground' : 'text-foreground'}`}>
+      <Label htmlFor={field.id} className={`text-sm font-semibold ${disabled ? 'text-gray-500' : 'text-gray-900'}`}>
         {field.label}
         {isEffectivelyRequired(field) && <span className="text-red-600 ml-1">*</span>}
       </Label>
@@ -975,18 +997,18 @@ export const DynamicForm: React.FC<DynamicFormProps> = ({
       case 'Email':
       case 'Phone':
         return (
-          <div key={field.id} className={`space-y-2 rounded-xl border-2 border-border bg-muted p-4 shadow-sm hover:shadow-md transition-all ${getFieldSpanClass(field)}`}>
+          <div key={field.id} className={`space-y-2 rounded-xl border-2 border-gray-300 bg-gray-50 p-4 shadow-sm hover:shadow-md transition-all ${getFieldSpanClass(field)}`}>
             {renderLabel()}
             <Input
               {...fieldProps}
               type={field.fieldType === 'Email' ? 'email' : field.fieldType === 'Phone' ? 'tel' : 'text'}
               value={typeof value === 'string' || typeof value === 'number' ? String(value) : ''}
               onChange={(e) => handleFieldChange(field.id, e.target.value)}
-              className={`bg-input border-2 ${error ? 'border-red-500' : 'border-input'} focus:border-blue-600 focus:ring-2 focus:ring-blue-100 text-foreground shadow-sm`}
+              className={`bg-white border-2 ${error ? 'border-red-500' : 'border-gray-200'} focus:border-blue-600 focus:ring-2 focus:ring-blue-100 text-gray-900 shadow-sm`}
               disabled={disabled}
             />
             {field.description && (
-              <p className="text-xs text-muted-foreground">{field.description}</p>
+              <p className="text-xs text-gray-600">{field.description}</p>
             )}
             {error && <p className="text-xs text-red-600 font-medium">{error}</p>}
           </div>
@@ -994,18 +1016,18 @@ export const DynamicForm: React.FC<DynamicFormProps> = ({
 
       case 'Long Text':
         return (
-          <div key={field.id} className={`space-y-2 rounded-xl border-2 border-border bg-muted p-4 shadow-sm hover:shadow-md transition-all ${getFieldSpanClass(field)}`}>
+          <div key={field.id} className={`space-y-2 rounded-xl border-2 border-gray-300 bg-gray-50 p-4 shadow-sm hover:shadow-md transition-all ${getFieldSpanClass(field)}`}>
             {renderLabel()}
             <Textarea
               {...fieldProps}
               value={typeof value === 'string' || typeof value === 'number' ? String(value) : ''}
               onChange={(e) => handleFieldChange(field.id, e.target.value)}
               rows={4}
-              className={`bg-input border-2 ${error ? 'border-red-500' : 'border-input'} focus:border-blue-600 focus:ring-2 focus:ring-blue-100 text-foreground shadow-sm`}
+              className={`bg-white border-2 ${error ? 'border-red-500' : 'border-gray-200'} focus:border-blue-600 focus:ring-2 focus:ring-blue-100 text-gray-900 shadow-sm`}
               disabled={disabled}
             />
             {field.description && (
-              <p className="text-xs text-muted-foreground">{field.description}</p>
+              <p className="text-xs text-gray-600">{field.description}</p>
             )}
             {error && <p className="text-xs text-red-600 font-medium">{error}</p>}
           </div>
@@ -1013,14 +1035,14 @@ export const DynamicForm: React.FC<DynamicFormProps> = ({
 
       case 'Number':
         return (
-          <div key={field.id} className={`space-y-2 rounded-xl border-2 border-border bg-muted p-4 shadow-sm hover:shadow-md transition-all ${getFieldSpanClass(field)}`}>
+          <div key={field.id} className={`space-y-2 rounded-xl border-2 border-gray-300 bg-gray-50 p-4 shadow-sm hover:shadow-md transition-all ${getFieldSpanClass(field)}`}>
             {renderLabel()}
             <Input
               {...fieldProps}
               type="number"
               value={typeof value === 'string' || typeof value === 'number' ? String(value) : ''}
               onChange={(e) => handleFieldChange(field.id, e.target.value)}
-              className={`bg-input border-2 ${error ? 'border-red-500' : 'border-input'} focus:border-blue-600 focus:ring-2 focus:ring-blue-100 text-foreground shadow-sm`}
+              className={`bg-white border-2 ${error ? 'border-red-500' : 'border-gray-200'} focus:border-blue-600 focus:ring-2 focus:ring-blue-100 text-gray-900 shadow-sm`}
               disabled={disabled}
             />
             {field.description && (
@@ -1036,17 +1058,17 @@ export const DynamicForm: React.FC<DynamicFormProps> = ({
             ? (staffOptions.length > 0 ? staffOptions : field.options ?? [])
             : (field.options ?? []);
         return (
-          <div key={field.id} className={`space-y-2 rounded-xl border-2 border-border bg-muted p-4 shadow-sm hover:shadow-md transition-all ${getFieldSpanClass(field)}`}>
+          <div key={field.id} className={`space-y-2 rounded-xl border-2 border-gray-300 bg-gray-50 p-4 shadow-sm hover:shadow-md transition-all ${getFieldSpanClass(field)}`}>
             {renderLabel()}
             <Select
               value={value}
               onValueChange={(newValue) => handleFieldChange(field.id, newValue)}
               disabled={disabled}
             >
-              <SelectTrigger className={`bg-input border-2 ${error ? 'border-red-500' : 'border-input'} focus:border-blue-600 focus:ring-2 focus:ring-blue-100 text-foreground shadow-sm`}>
+              <SelectTrigger className={`bg-white border-2 ${error ? 'border-red-500' : 'border-gray-200'} focus:border-blue-600 focus:ring-2 focus:ring-blue-100 text-gray-900 shadow-sm`}>
                 <SelectValue placeholder={`Select ${field.label}`} />
               </SelectTrigger>
-              <SelectContent className="bg-input border-2 border-input shadow-lg">
+              <SelectContent className="bg-white border-2 border-gray-200 shadow-lg">
                 {isAssignedToField(field) ? (
                   <>
                     <SelectItem value="__UNASSIGNED__">Unassigned</SelectItem>
@@ -1087,7 +1109,7 @@ export const DynamicForm: React.FC<DynamicFormProps> = ({
               </SelectContent>
             </Select>
             {field.description && (
-              <p className="text-xs text-muted-foreground">{field.description}</p>
+              <p className="text-xs text-gray-600">{field.description}</p>
             )}
             {error && <p className="text-xs text-red-600 font-medium">{error}</p>}
           </div>
@@ -1099,7 +1121,7 @@ export const DynamicForm: React.FC<DynamicFormProps> = ({
           const selected: string[] = Array.isArray(value) ? value.map((v: any) => String(v)) : [];
           const opts = (field.options ?? []).map((o) => String(o)).filter(Boolean);
           return (
-            <div key={field.id} className={`space-y-2 rounded-xl border-2 border-border bg-muted p-4 shadow-sm hover:shadow-md transition-all ${getFieldSpanClass(field)}`}>
+            <div key={field.id} className={`space-y-2 rounded-xl border-2 border-gray-300 bg-gray-50 p-4 shadow-sm hover:shadow-md transition-all ${getFieldSpanClass(field)}`}>
               {renderLabel()}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {opts.map((opt) => {
@@ -1290,7 +1312,7 @@ export const DynamicForm: React.FC<DynamicFormProps> = ({
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* Progress Bar - Icons Only */}
         {sectioned.length > 1 && (
-          <div className="bg-card rounded-xl border-2 border-card-border shadow-lg p-4 mb-6">
+          <div className="bg-white rounded-xl border-2 border-gray-200 shadow-lg p-4 mb-6">
             <div className="flex items-center justify-between gap-2">
               {sectioned.map((section, index) => {
                 const iconMap: Record<string, any> = {
@@ -1329,7 +1351,7 @@ export const DynamicForm: React.FC<DynamicFormProps> = ({
                       <div className={`w-10 h-10 rounded-full flex items-center justify-center transition-all shadow-md ${
                         isActive ? 'bg-blue-600 text-white ring-4 ring-blue-200 shadow-xl' : 
                         isCompleted ? 'bg-green-600 text-white shadow-lg hover:shadow-xl' : 
-                        'bg-muted text-muted-foreground'
+                        'bg-gray-200 text-gray-400'
                       }`}>
                         {typeof IconComponent === 'function' ? (
                           <IconComponent />
@@ -1345,7 +1367,7 @@ export const DynamicForm: React.FC<DynamicFormProps> = ({
                     </button>
                     {index < sectioned.length - 1 && (
                       <div className={`flex-1 h-1 rounded-full transition-all ${
-                        index < currentSectionIndex ? 'bg-green-600' : 'bg-muted'
+                        index < currentSectionIndex ? 'bg-green-600' : 'bg-gray-200'
                       }`} />
                     )}
                   </React.Fragment>
@@ -1357,7 +1379,7 @@ export const DynamicForm: React.FC<DynamicFormProps> = ({
 
         {/* Current Section */}
         {currentSection && (
-          <div className="bg-card rounded-xl border border-card-border shadow-lg p-8">
+          <div className="bg-white rounded-xl border border-gray-200 shadow-lg p-8">
             {(() => {
               const section = currentSection;
               const iconMap: Record<string, any> = {
@@ -1397,10 +1419,10 @@ export const DynamicForm: React.FC<DynamicFormProps> = ({
                         )}
                       </div>
                       <div className="flex-1">
-                        <h2 className="text-2xl font-bold text-foreground mb-2">
+                        <h2 className="text-2xl font-bold text-gray-900 mb-2">
                           {section.title}
                         </h2>
-                        <p className="text-muted-foreground">
+                        <p className="text-gray-600">
                           {section.key === 'category_selection' && 'Choose the appropriate category and subcategory for your ticket'}
                           {section.key === 'global' && 'Basic ticket information and assignment details'}
                           {section.key === 'issue_details' && 'Provide detailed information about the issue or incident'}
@@ -1745,9 +1767,9 @@ export const DynamicForm: React.FC<DynamicFormProps> = ({
                           <p className="text-gray-700 mb-4">
                             {context?.categoryName && context?.subCategoryName ? (
                               <>
-                                <span className="font-semibold text-foreground">{context.categoryName}</span>
+                                <span className="font-semibold text-gray-900">{context.categoryName}</span>
                                 {' → '}
-                                <span className="font-semibold text-foreground">{context.subCategoryName}</span>
+                                <span className="font-semibold text-gray-900">{context.subCategoryName}</span>
                               </>
                             ) : (
                               'Category and subcategory selected'
@@ -1773,7 +1795,7 @@ export const DynamicForm: React.FC<DynamicFormProps> = ({
                   </div>
 
                   {/* Navigation Buttons */}
-                  <div className="flex items-center justify-between pt-8 mt-8 border-t border-input">
+                  <div className="flex items-center justify-between pt-8 mt-8 border-t border-gray-200">
                     <Button
                       type="button"
                       variant="outline"

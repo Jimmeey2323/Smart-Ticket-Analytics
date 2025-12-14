@@ -273,7 +273,7 @@ export class DatabaseStorage implements IStorage {
         return updated as User;
       }
 
-      // If only email-row exists, create desired-id row, repoint, delete old.
+      // If only email-row exists, repoint old row to new id, then delete old.
       if (byEmail) {
         const base: User = byEmail as any;
         const nextRole = (input.role !== undefined && input.role !== null ? input.role : base.role) as any;
@@ -286,6 +286,13 @@ export class DatabaseStorage implements IStorage {
           base.fullName ||
           desiredEmail;
 
+        // First repoint all foreign keys from old id to desired id
+        await repointUserId(byEmail.id, desiredId);
+        
+        // Then delete the old user row
+        await tx.delete(users).where(eq(users.id, byEmail.id));
+
+        // Now insert with the new desired id and email (which is now safe)
         const [inserted] = await tx
           .insert(users)
           .values({
@@ -303,8 +310,6 @@ export class DatabaseStorage implements IStorage {
           } as any)
           .returning();
 
-        await repointUserId(byEmail.id, desiredId);
-        await tx.delete(users).where(eq(users.id, byEmail.id));
         return inserted as User;
       }
 

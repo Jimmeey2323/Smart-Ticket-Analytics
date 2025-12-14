@@ -296,8 +296,8 @@ export const CategorySelector: React.FC<CategorySelectorProps> = ({
                 >
                   1
                 </motion.div>
-                <h2 className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">Select Ticket Category</h2>
-                <p className="text-sm text-gray-600 mt-2">Choose the main category for your support ticket</p>
+                <h2 className="text-2xl font-bold text-foreground">Select Ticket Category</h2>
+                <p className="text-sm text-muted-foreground mt-2">Choose the main category for your support ticket</p>
               </div>
 
               <motion.div 
@@ -348,10 +348,10 @@ export const CategorySelector: React.FC<CategorySelectorProps> = ({
                           {/* Text content */}
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2">
-                              <h3 className="font-bold text-sm text-gray-900">{cat.name}</h3>
+                              <h3 className="font-bold text-sm text-foreground">{cat.name}</h3>
                             </div>
                             {cat.description && (
-                              <p className="text-xs text-gray-600 line-clamp-2 mt-1">{cat.description}</p>
+                              <p className="text-xs text-muted-foreground line-clamp-2 mt-1">{cat.description}</p>
                             )}
                           </div>
 
@@ -362,8 +362,8 @@ export const CategorySelector: React.FC<CategorySelectorProps> = ({
                             whileHover={{ opacity: 1, x: 0 }}
                             transition={{ duration: 0.2 }}
                           >
-                            <div className="text-xs font-semibold text-gray-700">12 tickets</div>
-                            <div className="text-xs text-gray-500">Avg: 2.4h</div>
+                            <div className="text-xs font-semibold text-foreground">12 tickets</div>
+                            <div className="text-xs text-muted-foreground">Avg: 2.4h</div>
                           </motion.div>
                         </div>
                       </motion.div>
@@ -393,8 +393,8 @@ export const CategorySelector: React.FC<CategorySelectorProps> = ({
                 >
                   {subCategory ? <CheckCircle2 className="w-7 h-7" /> : '2'}
                 </motion.div>
-                <h2 className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">Select Subcategory</h2>
-                <p className="text-sm text-gray-600 mt-2">Choose the specific issue type within <span className="font-semibold text-gray-800">{selectedCategoryData?.name}</span></p>
+                <h2 className="text-2xl font-bold text-foreground">Select Subcategory</h2>
+                <p className="text-sm text-muted-foreground mt-2">Choose the specific issue type within <span className="font-semibold text-foreground">{selectedCategoryData?.name}</span></p>
                 <motion.button
                   onClick={() => {
                     setCategory('');
@@ -402,7 +402,7 @@ export const CategorySelector: React.FC<CategorySelectorProps> = ({
                   }}
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
-                  className="absolute right-0 top-0 px-4 py-2 rounded-lg text-sm font-medium bg-white/80 hover:bg-white border border-gray-200 text-gray-700 transition-all shadow-sm backdrop-blur-sm"
+                  className="absolute right-0 top-0 px-4 py-2 rounded-lg text-sm font-medium bg-muted hover:bg-muted/80 border border-border text-foreground transition-all shadow-sm backdrop-blur-sm"
                 >
                   ← Change Category
                 </motion.button>
@@ -413,7 +413,7 @@ export const CategorySelector: React.FC<CategorySelectorProps> = ({
                   {[1, 2, 3, 4].map((i) => (
                     <div
                       key={i}
-                      className="h-28 rounded-2xl bg-gradient-to-br from-gray-200 to-gray-300 animate-pulse"
+                      className="h-28 rounded-2xl bg-muted animate-pulse"
                     />
                   ))}
                 </div>
@@ -476,7 +476,7 @@ export const CategorySelector: React.FC<CategorySelectorProps> = ({
                           {/* Text content */}
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2">
-                              <h3 className="font-bold text-sm text-gray-900">{subCat.name}</h3>
+                              <h3 className="font-bold text-sm text-foreground">{subCat.name}</h3>
                               {isSubSelected && (
                                 <motion.div
                                   initial={{ scale: 0, rotate: -180 }}
@@ -488,7 +488,7 @@ export const CategorySelector: React.FC<CategorySelectorProps> = ({
                               )}
                             </div>
                             {subCat.description && (
-                              <p className="text-xs text-gray-600 line-clamp-1 mt-1">{subCat.description}</p>
+                              <p className="text-xs text-muted-foreground line-clamp-1 mt-1">{subCat.description}</p>
                             )}
                           </div>
 
@@ -499,8 +499,8 @@ export const CategorySelector: React.FC<CategorySelectorProps> = ({
                             whileHover={{ opacity: 1, x: 0 }}
                             transition={{ duration: 0.2 }}
                           >
-                            <div className="text-xs font-semibold text-gray-700">{fieldCount} fields</div>
-                            <div className="text-xs text-gray-500">Avg: 8 min</div>
+                            <div className="text-xs font-semibold text-foreground">{fieldCount} fields</div>
+                            <div className="text-xs text-muted-foreground">Avg: 8 min</div>
                           </motion.div>
                         </div>
                       </motion.div>
@@ -515,10 +515,10 @@ export const CategorySelector: React.FC<CategorySelectorProps> = ({
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.4, delay: 0.15 }}
-                  className="mt-8 p-6 rounded-2xl bg-white/40 backdrop-blur-md border border-white/60 transition-all"
+                  className="mt-8 p-6 rounded-2xl bg-muted/50 backdrop-blur-md border border-border transition-all"
                 >
                   <div className="flex items-center gap-2 mb-4">
-                    <h4 className="text-base font-bold text-gray-900">Available Fields</h4>
+                    <h4 className="text-base font-bold text-foreground">Available Fields</h4>
                     <Badge variant="secondary" className="text-xs">
                       {(() => {
                         const globalSc = globalSubCategories.find(s => (s.name ?? '').toLowerCase() === 'global') ?? null;

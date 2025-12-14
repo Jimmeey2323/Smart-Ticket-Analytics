@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { ArrowLeft, Sparkles } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { CategorySelector } from "@/components/category-selector";
 import { DynamicForm } from "@/components/dynamic-form";
 import { FieldDefinition, TicketFormData } from "@shared/ticket-schema";
@@ -260,83 +260,79 @@ export default function CreateTicket() {
     };
   }, [user, nextTicketNumber?.ticketNumber, reportedAtIso]);
 
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
-      <div className="container mx-auto py-8 px-4 max-w-7xl">
-        {/* Main Container with Box Border */}
-        <div className="bg-white/50 backdrop-blur-xl rounded-2xl border-2 border-white/60 shadow-2xl p-8">
-          {/* Centered Animated Header */}
-          <motion.div 
-            className="text-center mb-10"
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6 }}
-          >
-            <motion.div
-              className="inline-flex items-center justify-center w-16 h-16 mb-4 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 shadow-lg"
-              animate={{ 
-                rotate: [0, 10, -10, 0],
-                scale: [1, 1.05, 1]
-              }}
-              transition={{ 
-                duration: 3,
-                repeat: Infinity,
-                ease: "easeInOut"
-              }}
-            >
-              <Sparkles className="w-8 h-8 text-white" />
-            </motion.div>
-            <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 bg-clip-text text-transparent mb-2">
-              Create New Ticket
-            </h1>
-            <p className="text-gray-600 text-sm">Select a category and fill in the details to submit your ticket</p>
-          </motion.div>
+  // Auto-hide sidebar on mount and implement hover functionality
+  useEffect(() => {
+    const sidebarTrigger = document.querySelector('[data-sidebar="trigger"]') as HTMLElement;
+    const sidebar = document.querySelector('[data-sidebar="sidebar"]') as HTMLElement;
+    
+    // Auto-hide on mount
+    if (sidebarTrigger) {
+      sidebarTrigger.click();
+    }
 
-          {/* Navigation Button */}
-          <div className="mb-8">
+    // Implement hover behavior
+    let hideTimeout: NodeJS.Timeout;
+    
+    const handleMouseEnter = () => {
+      clearTimeout(hideTimeout);
+      // Show sidebar if hidden
+      const isHidden = sidebar?.getAttribute('data-state') === 'collapsed';
+      if (isHidden && sidebarTrigger) {
+        sidebarTrigger.click();
+      }
+    };
+
+    const handleMouseLeave = () => {
+      // Auto-hide after 2 seconds of mouse leaving
+      hideTimeout = setTimeout(() => {
+        const isVisible = sidebar?.getAttribute('data-state') === 'expanded';
+        const isPinned = sidebar?.hasAttribute('data-pinned');
+        if (isVisible && !isPinned && sidebarTrigger) {
+          sidebarTrigger.click();
+        }
+      }, 2000);
+    };
+
+    if (sidebar) {
+      sidebar.addEventListener('mouseenter', handleMouseEnter);
+      sidebar.addEventListener('mouseleave', handleMouseLeave);
+    }
+
+    return () => {
+      clearTimeout(hideTimeout);
+      if (sidebar) {
+        sidebar.removeEventListener('mouseenter', handleMouseEnter);
+        sidebar.removeEventListener('mouseleave', handleMouseLeave);
+      }
+    };
+  }, []);
+
+  return (
+    <div className="min-h-screen bg-background">
+      <div className="container mx-auto py-8 px-4 max-w-5xl">
+        {/* Header */}
+        <div className="mb-8">
+          <div className="flex items-center justify-between mb-6">
             <Button 
               variant="ghost" 
               size="sm" 
               onClick={() => navigate('/tickets')}
-              className="hover:bg-white/80 backdrop-blur-sm"
+              className="text-muted-foreground hover:text-foreground hover:bg-muted"
             >
               <ArrowLeft className="w-4 h-4 mr-2" />
               Back to Tickets
             </Button>
+            <div className="flex items-center gap-3">
+              <img src="/logo.png" alt="Logo" className="w-10 h-10 object-contain" />
+            </div>
           </div>
-
-          {/* Progress Indicator */}
-          <div className="mb-8 flex items-center justify-center gap-3">
-            <motion.div 
-              className="flex items-center gap-2"
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: 0.2 }}
-            >
-              <Badge 
-                variant={!showForm ? "default" : "secondary"}
-                className={`${!showForm ? 'bg-gradient-to-r from-blue-500 to-indigo-600' : ''} text-sm px-3 py-1`}
-              >
-                1
-              </Badge>
-              <span className="font-medium text-gray-700">Choose category</span>
-            </motion.div>
-            <span className="px-2 text-gray-400">→</span>
-            <motion.div 
-              className="flex items-center gap-2"
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: 0.3 }}
-            >
-              <Badge 
-                variant={showForm ? "default" : "secondary"}
-                className={`${showForm ? 'bg-gradient-to-r from-blue-500 to-indigo-600' : ''} text-sm px-3 py-1`}
-              >
-                2
-              </Badge>
-              <span className="font-medium text-gray-700">Fill details</span>
-            </motion.div>
+          <div>
+            <h1 className="text-3xl font-bold text-foreground mb-2">
+              Create New Ticket
+            </h1>
+            <p className="text-muted-foreground">Select a category and fill in the details to submit your ticket</p>
           </div>
+        </div>
 
         <AnimatePresence mode="wait" initial={false}>
           {!showForm ? (
@@ -346,6 +342,7 @@ export default function CreateTicket() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
               transition={{ duration: 0.2 }}
+              className="bg-card rounded-xl border border-card-border shadow-lg p-6"
             >
               {isAutoSelectingTemplate ? (
                 <div className="space-y-4">
@@ -386,12 +383,12 @@ export default function CreateTicket() {
               transition={{ duration: 0.2 }}
               className="space-y-6"
             >
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between mb-6 pb-4 border-b border-border">
                 <Button
                   variant="ghost"
                   size="sm"
                   onClick={() => setShowForm(false)}
-                  className="hover:bg-white/80 backdrop-blur-sm"
+                  className="text-muted-foreground hover:text-foreground hover:bg-muted"
                 >
                   <ArrowLeft className="w-4 h-4 mr-2" />
                   Change Category
@@ -412,12 +409,16 @@ export default function CreateTicket() {
                 description="Fill in the details below to create your ticket. Required fields are marked with an asterisk."
                 mode="create"
                 fieldGroups={fieldGroups}
-                context={{ categoryName: selectedCategoryName, subCategoryName: selectedSubCategoryName }}
+                context={{ 
+                  categoryName: selectedCategoryName, 
+                  subCategoryName: selectedSubCategoryName,
+                  showForm,
+                  onBackToCategory: () => setShowForm(false)
+                }}
               />
             </motion.div>
           )}
         </AnimatePresence>
-        </div>
       </div>
     </div>
   );
