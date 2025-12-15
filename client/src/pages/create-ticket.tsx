@@ -1,13 +1,14 @@
-import { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
+import { useTheme } from "@/components/theme-provider";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, ClipboardList, FileText, UserRound, Timer, MapPin, ShieldCheck, Paperclip } from "lucide-react";
 import { CategorySelector } from "@/components/category-selector";
 import { DynamicForm } from "@/components/dynamic-form";
 import { FieldDefinition, TicketFormData } from "@shared/ticket-schema";
@@ -261,77 +262,41 @@ export default function CreateTicket() {
     };
   }, [user, nextTicketNumber?.ticketNumber, reportedAtIso]);
 
-  // Auto-hide sidebar on mount and implement hover functionality
-  useEffect(() => {
-    const sidebarTrigger = document.querySelector('[data-sidebar="trigger"]') as HTMLElement;
-    const sidebar = document.querySelector('[data-sidebar="sidebar"]') as HTMLElement;
-    
-    // Auto-hide on mount
-    if (sidebarTrigger) {
-      sidebarTrigger.click();
-    }
+  // Sidebar auto-hide removed to keep navigation persistent when creating tickets
 
-    // Implement hover behavior
-    let hideTimeout: NodeJS.Timeout;
-    
-    const handleMouseEnter = () => {
-      clearTimeout(hideTimeout);
-      // Show sidebar if hidden
-      const isHidden = sidebar?.getAttribute('data-state') === 'collapsed';
-      if (isHidden && sidebarTrigger) {
-        sidebarTrigger.click();
-      }
-    };
-
-    const handleMouseLeave = () => {
-      // Auto-hide after 2 seconds of mouse leaving
-      hideTimeout = setTimeout(() => {
-        const isVisible = sidebar?.getAttribute('data-state') === 'expanded';
-        const isPinned = sidebar?.hasAttribute('data-pinned');
-        if (isVisible && !isPinned && sidebarTrigger) {
-          sidebarTrigger.click();
-        }
-      }, 2000);
-    };
-
-    if (sidebar) {
-      sidebar.addEventListener('mouseenter', handleMouseEnter);
-      sidebar.addEventListener('mouseleave', handleMouseLeave);
-    }
-
-    return () => {
-      clearTimeout(hideTimeout);
-      if (sidebar) {
-        sidebar.removeEventListener('mouseenter', handleMouseEnter);
-        sidebar.removeEventListener('mouseleave', handleMouseLeave);
-      }
-    };
-  }, []);
+  const { theme } = useTheme();
+  const isDark = theme === 'dark' || (theme === 'system' && typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches);
 
   return (
-    <div className="min-h-screen bg-background">
-      <div className="container mx-auto py-8 px-4 max-w-5xl">
+    <div className={`min-h-screen ${
+      isDark ? 'bg-gradient-to-br from-slate-900 via-blue-900/20 to-slate-900' : 'bg-gradient-to-br from-white via-blue-50 to-slate-50'
+    }`}>
+      <div className="container mx-auto py-12 px-4 max-w-5xl">
         {/* Header */}
-        <div className="mb-8">
-          <div className="flex items-center justify-between mb-6">
+        <div className="mb-12">
+          <div className="flex items-center justify-between mb-8">
             <Button 
               variant="ghost" 
               size="sm" 
               onClick={() => navigate('/tickets')}
-              className="text-muted-foreground hover:text-foreground hover:bg-muted"
+              className={`font-bold transition-all duration-300 ${
+                isDark
+                  ? 'text-blue-300 hover:text-blue-200 hover:bg-blue-500/20'
+                  : 'text-blue-700 hover:text-blue-900 hover:bg-blue-100'
+              }`}
             >
-              <ArrowLeft className="w-4 h-4 mr-2" />
+              <ArrowLeft className="w-5 h-5 mr-2" />
               Back to Tickets
             </Button>
             <div className="flex items-center gap-3">
-              <img src="/logo.png" alt="Logo" className="w-10 h-10 object-contain" />
+              <img src="/logo.png" alt="Logo" className="w-12 h-12 object-contain" />
             </div>
           </div>
           <div>
-            <h1 className="text-3xl font-bold text-foreground mb-2">
-              Create New Ticket
-            </h1>
-            <p className="text-muted-foreground">Select a category and fill in the details to submit your ticket</p>
+            <h1 className="text-4xl md:text-5xl font-black tracking-tight mb-4 accent-gradient-text">Create New Ticket</h1>
+            <p className={`text-lg font-semibold ${
+              isDark ? 'text-gray-300' : 'text-slate-700'
+            }`}>Select a category and fill in the details to submit your ticket</p>
           </div>
         </div>
 
@@ -368,11 +333,52 @@ export default function CreateTicket() {
                   </Card>
                 </div>
               ) : (
-                <CategorySelector
-                  onCategorySelect={handleCategorySelect}
-                  selectedCategory={selectedCategory}
-                  selectedSubCategory={selectedSubCategory}
-                />
+                <div>
+                  <div className="mb-6">
+                    <div className="bg-card rounded-xl border-2 border-card-border shadow-sm p-3 mb-6">
+                      <div className="flex items-center justify-between gap-2">
+                        {['category_selection','global','issue_details','reporter_client','timeline','location','operational','actions','attachments'].map((key, index) => {
+                          const iconMap: Record<string, any> = {
+                            category_selection: () => <img src="/logo.png" alt="Category" className="w-4 h-4 object-contain" />,
+                            global: ClipboardList,
+                            issue_details: FileText,
+                            reporter_client: UserRound,
+                            timeline: Timer,
+                            location: MapPin,
+                            operational: ShieldCheck,
+                            actions: FileText,
+                            attachments: Paperclip,
+                          };
+                          const IconComponent = iconMap[key] ?? FileText;
+                          const isActive = index === 0;
+
+                          return (
+                            <React.Fragment key={key}>
+                              <div className="group relative">
+                                <div className={`w-8 h-8 rounded-full flex items-center justify-center transition-transform duration-150 ${
+                                  isActive ? 'bg-black text-white ring-2 ring-black/10' : 'bg-muted text-muted-foreground'
+                                }`}>
+                                  {typeof IconComponent === 'function' ? (
+                                    <IconComponent className="w-4 h-4" />
+                                  ) : (
+                                    <IconComponent className="w-4 h-4" />
+                                  )}
+                                </div>
+                              </div>
+                              {index < 8 && <div className="flex-1 h-1 rounded-full bg-muted" />}
+                            </React.Fragment>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+
+                  <CategorySelector
+                    onCategorySelect={handleCategorySelect}
+                    selectedCategory={selectedCategory}
+                    selectedSubCategory={selectedSubCategory}
+                  />
+                </div>
               )}
             </motion.div>
           ) : (

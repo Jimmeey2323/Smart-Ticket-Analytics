@@ -672,16 +672,15 @@ export const DynamicForm: React.FC<DynamicFormProps> = ({
   const sectioned = useMemo(() => {
     const sections: Array<{ key: string; title: string; fields: FieldDefinition[] }> = [];
 
-    // Add category selection as first section if we have the context
-    if (context?.showForm === false) {
-      sections.push({
-        key: 'category_selection',
-        title: 'Category Selection',
-        fields: [] // No fields, handled specially
-      });
-    }
+    // Include category selection as the first section so it appears in the progress bar
+    sections.push({
+      key: 'category_selection',
+      title: 'Category Selection',
+      fields: [] // No fields, handled specially by the CategorySelector
+    });
 
     // If DB-backed groups are provided, use them as the source of truth for dynamic headers.
+    // Keep trying to use fieldGroups even if visibleFields might change; the form should honor backend structure.
     if (Array.isArray(fieldGroups) && fieldGroups.length > 0) {
       const normalizeIds = (raw: any): string[] => {
         if (!raw) return [];
@@ -711,8 +710,12 @@ export const DynamicForm: React.FC<DynamicFormProps> = ({
         })
         .filter((g) => g.fields.length > 0);
       
+      // Return fieldGroups-based sections immediately when available
       return [...sections, ...formSections];
     }
+
+    // Fallback: if no fieldGroups, construct sections from visibleFields
+    // This ensures form shows even while fieldGroups query is loading
 
     const bySection = new Map<string, FieldDefinition[]>();
     for (const f of visibleFields) {
@@ -739,7 +742,6 @@ export const DynamicForm: React.FC<DynamicFormProps> = ({
     }
 
     const formSections = SECTION_ORDER
-      .filter(s => s.key !== 'category_selection') // Exclude category from standard processing
       .map((s) => {
         const dynamicTitle =
           s.key === 'issue_details' && context?.subCategoryName
@@ -1313,40 +1315,28 @@ export const DynamicForm: React.FC<DynamicFormProps> = ({
                     <button
                       type="button"
                       onClick={() => {
-                        // Allow navigation to completed sections or current section
-                        if (index <= currentSectionIndex) {
-                          setCurrentSectionIndex(index);
-                        }
+                        if (index <= currentSectionIndex) setCurrentSectionIndex(index);
                       }}
                       disabled={index > currentSectionIndex}
                       title={section.title}
-                      className={`group relative transition-all ${
-                        isActive ? 'scale-110' : ''
-                      } ${
-                        index > currentSectionIndex ? 'cursor-not-allowed' : 'cursor-pointer'
-                      }`}
+                      className={`group relative transition-all ${index > currentSectionIndex ? 'cursor-not-allowed' : 'cursor-pointer'}`}
                     >
-                      <div className={`w-10 h-10 rounded-full flex items-center justify-center transition-all shadow-md ${
-                        isActive ? 'bg-blue-600 text-white ring-4 ring-blue-200 shadow-xl' : 
-                        isCompleted ? 'bg-green-600 text-white shadow-lg hover:shadow-xl' : 
-                        'bg-muted text-muted-foreground'
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center transition-transform duration-200 shadow-sm ${
+                        isActive ? 'bg-black text-white ring-2 ring-black/10 shadow-md' : isCompleted ? 'bg-green-600 text-white' : 'bg-muted text-muted-foreground'
                       }`}>
                         {typeof IconComponent === 'function' ? (
-                          <IconComponent />
+                          <IconComponent className="w-4 h-4" />
                         ) : (
-                          <IconComponent className="w-5 h-5" />
+                          <IconComponent className="w-4 h-4" />
                         )}
                       </div>
-                      {/* Tooltip on hover */}
-                      <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 px-3 py-1.5 bg-gray-900 text-white text-xs rounded-lg whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
+                      {/* Tooltip on hover (subtle) */}
+                      <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 px-3 py-1 bg-gray-900 text-white text-xs rounded-lg whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
                         {section.title}
-                        <div className="absolute left-1/2 -translate-x-1/2 top-full w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900" />
                       </div>
                     </button>
                     {index < sectioned.length - 1 && (
-                      <div className={`flex-1 h-1 rounded-full transition-all ${
-                        index < currentSectionIndex ? 'bg-green-600' : 'bg-muted'
-                      }`} />
+                      <div className={`flex-1 h-1 rounded-full transition-colors ${index < currentSectionIndex ? 'bg-green-600' : 'bg-muted'}`} />
                     )}
                   </React.Fragment>
                 );

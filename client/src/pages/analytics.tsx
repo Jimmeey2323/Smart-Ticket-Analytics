@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useTheme } from "@/components/theme-provider";
 import {
   Select,
   SelectContent,
@@ -197,6 +198,7 @@ function ProgressBar({
 
 export default function Analytics() {
   const [period, setPeriod] = useState("month");
+  const { theme } = useTheme();
 
   const { data: categories = [] } = useQuery<ApiCategory[]>({
     queryKey: ["/api/categories"],
@@ -327,14 +329,21 @@ export default function Analytics() {
   }
 
   return (
-    <div className="space-y-6 app-container">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div className={`min-h-screen space-y-8 app-container ${
+      theme === 'dark' ? 'bg-gradient-to-br from-slate-900 via-blue-900/20 to-slate-900' : 'bg-gradient-to-br from-white via-blue-50 to-slate-50'
+    }`}>
+      <div className="flex flex-col gap-6">
         <div>
-          <h1 className="page-title">Analytics</h1>
-          <p className="page-subtitle">
-            Track performance metrics and insights
+          <h1 className="text-4xl md:text-5xl font-black tracking-tight mb-3 accent-gradient-text">Analytics</h1>
+          <p className={`text-lg font-semibold ${
+            theme === 'dark' ? 'text-gray-300' : 'text-slate-700'
+          }`}>
+            Deep insights into performance metrics and support operations
           </p>
         </div>
+      </div>
+
+      <div className="flex justify-end">
         <Select value={period} onValueChange={setPeriod}>
           <SelectTrigger className="w-[140px]" data-testid="select-period">
             <SelectValue placeholder="Select period" />

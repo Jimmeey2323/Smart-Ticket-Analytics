@@ -30,6 +30,8 @@ interface DashboardStats {
   ticketsTrend: number;
 }
 
+import { useTheme } from "@/components/theme-provider";
+
 function StatCard({ 
   title, 
   value, 
@@ -47,24 +49,43 @@ function StatCard({
   trendDirection?: 'up' | 'down' | 'neutral';
   className?: string;
 }) {
+  const { theme } = useTheme();
+  const isDark = theme === 'dark' || (theme === 'system' && typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+  
   return (
-    <Card className={`relative overflow-hidden ${className}`}>
-      <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-slate-900 to-slate-700 dark:from-white dark:to-slate-300" />
-      <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-        <CardTitle className="text-sm font-medium text-muted-foreground">
+    <Card className={`relative overflow-hidden border backdrop-blur-lg transition-all duration-300 group hover:shadow-2xl ${
+      isDark
+        ? 'bg-slate-800/50 border-blue-500/40 hover:border-blue-400/80 hover:bg-slate-800/70 hover:shadow-2xl hover:shadow-blue-500/20'
+        : 'bg-white/70 border-blue-200/60 hover:border-blue-400/80 hover:bg-white/90 hover:shadow-2xl hover:shadow-blue-300/30'
+    } ${className}`}>
+      <div className="absolute top-0 left-0 right-0 h-1.5 accent-gradient-bar" />
+      <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-3">
+        <CardTitle className={`text-xs font-black tracking-wider uppercase ${
+          isDark ? 'text-blue-300' : 'text-blue-700'
+        }`}>
           {title}
         </CardTitle>
-        <Icon className="h-4 w-4 text-muted-foreground" />
+        <div className={`p-2 rounded-lg ${
+          isDark
+            ? 'bg-blue-500/20'
+            : 'bg-blue-100/60'
+        }`}>
+          <Icon className={`h-5 w-5 ${
+            isDark ? 'text-blue-300' : 'text-blue-700'
+          }`} />
+        </div>
       </CardHeader>
       <CardContent>
-        <div className="text-2xl font-bold">{value}</div>
+        <div className={`text-4xl font-black ${
+          isDark ? 'text-white' : 'text-slate-900'
+        }`}>{value}</div>
         {(description || trend !== undefined) && (
           <div className="flex items-center gap-2 mt-1">
             {trend !== undefined && (
               <span className={`flex items-center text-xs ${
                 trendDirection === 'up' ? 'text-green-600 dark:text-green-400' :
                 trendDirection === 'down' ? 'text-red-600 dark:text-red-400' :
-                'text-muted-foreground'
+                isDark ? 'text-gray-400' : 'text-slate-500'
               }`}>
                 {trendDirection === 'up' ? <TrendingUp className="h-3 w-3 mr-1" /> :
                  trendDirection === 'down' ? <TrendingDown className="h-3 w-3 mr-1" /> : null}
@@ -72,7 +93,9 @@ function StatCard({
               </span>
             )}
             {description && (
-              <p className="text-xs text-muted-foreground">{description}</p>
+              <p className={`text-xs ${
+                isDark ? 'text-gray-400' : 'text-slate-500'
+              }`}>{description}</p>
             )}
           </div>
         )}
@@ -142,26 +165,16 @@ export default function Dashboard() {
     queryKey: ["/api/tickets", { slaStatus: "warning", limit: 5 }],
   });
 
+  const { theme } = useTheme();
+  const isDark = theme === 'dark' || (theme === 'system' && typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+
   if (statsLoading) {
     return (
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <Skeleton className="h-8 w-48 mb-2" />
-            <Skeleton className="h-4 w-64" />
-          </div>
-          <Skeleton className="h-10 w-32" />
-        </div>
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="space-y-8">
+        <Skeleton className="h-12 w-64" />
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
           {[...Array(4)].map((_, i) => (
-            <Card key={i}>
-              <CardHeader className="pb-2">
-                <Skeleton className="h-4 w-24" />
-              </CardHeader>
-              <CardContent>
-                <Skeleton className="h-8 w-16" />
-              </CardContent>
-            </Card>
+            <Skeleton key={i} className="h-36" />
           ))}
         </div>
       </div>
@@ -169,199 +182,226 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="space-y-6 app-container">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="page-title">Dashboard</h1>
-          <p className="page-subtitle">
-            Overview of customer feedback and ticket status
-          </p>
-        </div>
-        <Button asChild data-testid="button-create-ticket">
-          <Link href="/tickets/new">
-            <Plus className="mr-2 h-4 w-4" />
-            Create Ticket
-          </Link>
-        </Button>
-      </div>
-
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <StatCard
-          title="Total Tickets"
-          value={stats?.total || 0}
-          icon={Ticket}
-          trend={stats?.ticketsTrend}
-          trendDirection={stats?.ticketsTrend && stats.ticketsTrend > 0 ? 'up' : 'down'}
-          description="this month"
-        />
-        <StatCard
-          title="Open Tickets"
-          value={stats?.open || 0}
-          icon={AlertCircle}
-          description="awaiting action"
-        />
-        <StatCard
-          title="Avg Resolution"
-          value={`${stats?.avgResolutionHours || 0}h`}
-          icon={Timer}
-          description="average time"
-        />
-        <StatCard
-          title="SLA Compliance"
-          value={`${stats?.slaCompliancePercent || 0}%`}
-          icon={CheckCircle2}
-          trendDirection={stats?.slaCompliancePercent && stats.slaCompliancePercent >= 90 ? 'up' : 'down'}
-          description="on-time resolution"
-        />
-      </div>
-
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card className="col-span-1">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-100 dark:bg-blue-900/30">
-                <Clock className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">In Progress</p>
-                <p className="text-xl font-bold">{stats?.inProgress || 0}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="col-span-1">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-yellow-100 dark:bg-yellow-900/30">
-                <AlertTriangle className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Pending</p>
-                <p className="text-xl font-bold">{stats?.pending || 0}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="col-span-1">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-green-100 dark:bg-green-900/30">
-                <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400" />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Resolved</p>
-                <p className="text-xl font-bold">{stats?.resolved || 0}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="col-span-1">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-red-100 dark:bg-red-900/30">
-                <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400" />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Escalated</p>
-                <p className="text-xl font-bold">{stats?.escalated || 0}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="grid gap-6 lg:grid-cols-3">
-        <Card className="lg:col-span-1">
-          <CardHeader className="flex flex-row items-center justify-between gap-2">
+    <div className={`min-h-screen transition-colors duration-300 ${
+      isDark 
+        ? 'bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950' 
+        : 'bg-gradient-to-br from-slate-50 via-blue-50 to-slate-100'
+    }`}>
+      <div className={`border-b transition-colors duration-200 ${isDark ? 'border-slate-700/50 bg-slate-800/50' : 'border-blue-100/40 bg-blue-50/30'}`}>
+        <div className="app-container px-6 py-5">
+          <div className="flex items-center justify-between">
             <div>
-              <CardTitle className="text-base">High Priority</CardTitle>
-              <CardDescription>Critical & high priority tickets</CardDescription>
+              <h1 className="text-2xl font-black tracking-tight accent-gradient-text">Dashboard</h1>
+              <p className={`text-sm font-semibold tracking-wide ${isDark ? 'text-gray-400' : 'text-blue-700'}`}>Overview</p>
             </div>
-            <Badge variant="destructive" className="text-xs">
-              {urgentTickets?.length || 0}
-            </Badge>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {ticketsLoading ? (
-              [...Array(3)].map((_, i) => (
-                <Skeleton key={i} className="h-20 w-full" />
-              ))
-            ) : urgentTickets?.length ? (
-              urgentTickets.slice(0, 3).map((ticket) => (
-                <TicketPreviewCard key={ticket.id} ticket={ticket} />
-              ))
-            ) : (
-              <p className="text-sm text-muted-foreground text-center py-4">
-                No urgent tickets
+          </div>
+        </div>
+      </div>
+      
+      <div className="app-container space-y-8 pt-8">
+        <div className="flex items-center justify-between">
+          <div className="space-y-1">
+            <p className={`text-lg font-semibold ${isDark ? 'text-gray-300' : 'text-slate-600'}`}>
+              Monitor and manage customer feedback in real-time
+            </p>
+          </div>
+          <Button asChild data-testid="button-create-ticket" className={`px-6 py-3 text-base font-semibold rounded-xl transition-all duration-300 accent-gradient-bar text-white hover:shadow-2xl ${
+            isDark
+              ? 'hover:shadow-blue-500/40'
+              : 'hover:shadow-blue-400/40'
+          }`}>
+            <Link href="/tickets/new" className="flex items-center gap-2 whitespace-nowrap">
+              <Plus className="h-5 w-5" />
+              Create New Ticket
+            </Link>
+          </Button>
+        </div>
+
+        {/* Main KPI Cards */}
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+          <StatCard
+            title="Total Tickets"
+            value={stats?.total || 0}
+            icon={Ticket}
+            trend={stats?.ticketsTrend}
+            trendDirection={stats?.ticketsTrend && stats.ticketsTrend > 0 ? 'up' : 'down'}
+            description="this month"
+          />
+          <StatCard
+            title="Open Tickets"
+            value={stats?.open || 0}
+            icon={AlertCircle}
+            description="awaiting action"
+          />
+          <StatCard
+            title="Avg Resolution"
+            value={`${stats?.avgResolutionHours || 0}h`}
+            icon={Timer}
+            description="average time"
+          />
+          <StatCard
+            title="SLA Compliance"
+            value={`${stats?.slaCompliancePercent || 0}%`}
+            icon={CheckCircle2}
+            trendDirection={stats?.slaCompliancePercent && stats.slaCompliancePercent >= 90 ? 'up' : 'down'}
+            description="on-time resolution"
+          />
+        </div>
+
+        {/* Status Overview Cards */}
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          {[
+            { title: 'In Progress', icon: Clock, value: stats?.inProgress || 0, color: 'from-cyan-600 to-blue-600' },
+            { title: 'Pending', icon: AlertTriangle, value: stats?.pending || 0, color: 'from-amber-600 to-orange-600' },
+            { title: 'Resolved', icon: CheckCircle2, value: stats?.resolved || 0, color: 'from-emerald-600 to-green-600' },
+            { title: 'Escalated', icon: AlertTriangle, value: stats?.escalated || 0, color: 'from-rose-600 to-red-600' },
+          ].map((c, i) => (
+            <Card 
+              key={i} 
+              className={`relative overflow-hidden backdrop-blur-xl border transition-all duration-500 group cursor-pointer ${
+                isDark
+                  ? 'bg-slate-800/40 border-slate-700/50 hover:border-slate-600/80 hover:bg-slate-800/60 hover:shadow-2xl hover:shadow-slate-900/50'
+                  : 'bg-white/60 border-slate-200/60 hover:border-slate-300/80 hover:bg-white/80 hover:shadow-2xl hover:shadow-slate-300/40'
+              }`}
+            >
+              <div className={`absolute top-0 left-0 right-0 h-1 bg-gradient-to-r ${c.color} opacity-80 group-hover:opacity-100 transition-opacity`} />
+              <div className="absolute -top-40 -right-40 w-80 h-80 bg-gradient-to-br from-slate-600/10 to-transparent rounded-full blur-3xl group-hover:from-slate-500/15 transition-all" />
+              
+              <CardContent className="p-6 relative z-10">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className={`text-sm font-semibold uppercase tracking-widest mb-2 ${isDark ? 'text-gray-400' : 'text-slate-600'}`}>
+                      {c.title}
+                    </p>
+                    <p className={`text-4xl font-black ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                      {c.value}
+                    </p>
+                  </div>
+                  <div className={`flex h-14 w-14 items-center justify-center rounded-xl bg-gradient-to-br ${c.color} shadow-lg shadow-current/20`}>
+                    <c.icon className="h-7 w-7 text-white" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+
+        {/* Bottom Sections */}
+        <div className="grid gap-6 lg:grid-cols-3">
+          {/* High Priority */}
+          <Card className={`relative overflow-hidden backdrop-blur-xl border transition-all duration-500 ${
+            isDark
+              ? 'bg-slate-800/40 border-rose-700/30 hover:border-rose-600/50 hover:bg-slate-800/60 hover:shadow-2xl hover:shadow-rose-900/20'
+              : 'bg-white/60 border-rose-200/50 hover:border-rose-300/80 hover:bg-white/80 hover:shadow-2xl hover:shadow-rose-300/30'
+          }`}>
+            <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-rose-600 via-red-600 to-rose-600" />
+            <div className="absolute -top-32 -right-32 w-64 h-64 bg-gradient-to-br from-rose-600/10 to-transparent rounded-full blur-3xl" />
+            
+            <CardHeader className="relative z-10 pb-4">
+              <div className="flex items-start justify-between">
+                <div>
+                  <CardTitle className="text-xl font-black mb-1">Critical Tickets</CardTitle>
+                  <CardDescription>High priority items requiring immediate attention</CardDescription>
+                </div>
+                <Badge variant="destructive" className="text-lg py-1.5 px-3 font-bold">
+                  {urgentTickets?.length || 0}
+                </Badge>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-3 relative z-10">
+              {ticketsLoading ? (
+                [...Array(3)].map((_, i) => (
+                  <Skeleton key={i} className="h-20 w-full" />
+                ))
+              ) : urgentTickets?.length ? (
+                urgentTickets.slice(0, 3).map((ticket) => (
+                  <TicketPreviewCard key={ticket.id} ticket={ticket} />
+                ))
+              ) : (
+                <p className="text-sm text-muted-foreground text-center py-6">No urgent tickets</p>
+              )}
+              {(urgentTickets?.length || 0) > 3 && (
+                <Button variant="ghost" className="w-full mt-2" asChild>
+                  <Link href="/tickets?priority=critical,high" className="flex items-center justify-center gap-2">
+                    View All <ArrowRight className="h-4 w-4" />
+                  </Link>
+                </Button>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* SLA Compliance */}
+          <Card className={`relative overflow-hidden backdrop-blur-xl border transition-all duration-500 ${
+            isDark
+              ? 'bg-slate-800/40 border-blue-700/30 hover:border-blue-600/50 hover:bg-slate-800/60 hover:shadow-2xl hover:shadow-blue-900/20'
+              : 'bg-white/60 border-blue-200/50 hover:border-blue-300/80 hover:bg-white/80 hover:shadow-2xl hover:shadow-blue-300/30'
+          }`}>
+            <div className="absolute top-0 left-0 right-0 h-1 accent-gradient-bar" />
+            <div className="absolute -top-32 -right-32 w-64 h-64 bg-gradient-to-br from-blue-600/10 to-transparent rounded-full blur-3xl" />
+            
+            <CardHeader className="relative z-10 pb-4">
+              <div className="flex items-start justify-between">
+                <div>
+                  <CardTitle className="text-xl font-black mb-1">SLA Compliance</CardTitle>
+                  <CardDescription>Resolution performance vs target</CardDescription>
+                </div>
+                <Badge className="text-lg py-1.5 px-3 font-bold bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300">
+                  {stats?.slaCompliancePercent || 0}%
+                </Badge>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4 relative z-10">
+              <div className={`h-48 rounded-xl overflow-hidden border ${isDark ? 'border-slate-700/50' : 'border-slate-200/60'}`}>
+                <div className={`h-full w-full flex items-center justify-center ${isDark ? 'bg-gradient-to-br from-slate-800 to-slate-900' : 'bg-gradient-to-br from-slate-100 to-slate-50'}`}>
+                  <div className="text-center">
+                    <div className="text-5xl font-black accent-gradient-text mb-2">{stats?.slaCompliancePercent || 0}%</div>
+                    <p className={`text-sm font-medium ${isDark ? 'text-gray-400' : 'text-slate-600'}`}>Target: 95%</p>
+                  </div>
+                </div>
+              </div>
+              <p className={`text-xs font-medium ${isDark ? 'text-gray-400' : 'text-slate-600'}`}>
+                {stats?.slaCompliancePercent && stats.slaCompliancePercent >= 95 ? '✨ Exceeding target' : '📊 Below target'}
               </p>
-            )}
-            {(urgentTickets?.length || 0) > 3 && (
-              <Button variant="ghost" className="w-full" asChild>
-                <Link href="/tickets?priority=critical,high">
-                  View All
-                  <ArrowRight className="ml-2 h-4 w-4" />
+            </CardContent>
+          </Card>
+
+          {/* Recent Activity */}
+          <Card className={`relative overflow-hidden backdrop-blur-xl border transition-all duration-500 ${
+            isDark
+              ? 'bg-slate-800/40 border-emerald-700/30 hover:border-emerald-600/50 hover:bg-slate-800/60 hover:shadow-2xl hover:shadow-emerald-900/20'
+              : 'bg-white/60 border-emerald-200/50 hover:border-emerald-300/80 hover:bg-white/80 hover:shadow-2xl hover:shadow-emerald-300/30'
+          }`}>
+            <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-emerald-600 via-green-600 to-emerald-600" />
+            <div className="absolute -top-32 -right-32 w-64 h-64 bg-gradient-to-br from-emerald-600/10 to-transparent rounded-full blur-3xl" />
+            
+            <CardHeader className="relative z-10 pb-4">
+              <div className="flex items-start justify-between">
+                <div>
+                  <CardTitle className="text-xl font-black mb-1">Recent Activity</CardTitle>
+                  <CardDescription>Latest tickets created</CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-3 relative z-10">
+              {ticketsLoading ? (
+                [...Array(3)].map((_, i) => (
+                  <Skeleton key={i} className="h-20 w-full" />
+                ))
+              ) : recentTickets?.length ? (
+                recentTickets.slice(0, 3).map((ticket) => (
+                  <TicketPreviewCard key={ticket.id} ticket={ticket} />
+                ))
+              ) : (
+                <p className="text-sm text-muted-foreground text-center py-6">No recent tickets</p>
+              )}
+              <Button variant="ghost" className="w-full mt-2" asChild>
+                <Link href="/tickets" className="flex items-center justify-center gap-2">
+                  View All Tickets <ArrowRight className="h-4 w-4" />
                 </Link>
               </Button>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card className="lg:col-span-1">
-          <CardHeader className="flex flex-row items-center justify-between gap-2">
-            <div>
-              <CardTitle className="text-base">Due Soon</CardTitle>
-              <CardDescription>Approaching SLA deadline</CardDescription>
-            </div>
-            <Badge variant="secondary" className="text-xs bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300">
-              {dueSoonTickets?.length || 0}
-            </Badge>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {ticketsLoading ? (
-              [...Array(3)].map((_, i) => (
-                <Skeleton key={i} className="h-20 w-full" />
-              ))
-            ) : dueSoonTickets?.length ? (
-              dueSoonTickets.slice(0, 3).map((ticket) => (
-                <TicketPreviewCard key={ticket.id} ticket={ticket} />
-              ))
-            ) : (
-              <p className="text-sm text-muted-foreground text-center py-4">
-                No tickets due soon
-              </p>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card className="lg:col-span-1">
-          <CardHeader className="flex flex-row items-center justify-between gap-2">
-            <div>
-              <CardTitle className="text-base">Recent Activity</CardTitle>
-              <CardDescription>Latest tickets created</CardDescription>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {ticketsLoading ? (
-              [...Array(3)].map((_, i) => (
-                <Skeleton key={i} className="h-20 w-full" />
-              ))
-            ) : recentTickets?.length ? (
-              recentTickets.slice(0, 3).map((ticket) => (
-                <TicketPreviewCard key={ticket.id} ticket={ticket} />
-              ))
-            ) : (
-              <p className="text-sm text-muted-foreground text-center py-4">
-                No recent tickets
-              </p>
-            )}
-            <Button variant="ghost" className="w-full" asChild>
-              <Link href="/tickets">
-                View All Tickets
-                <ArrowRight className="ml-2 h-4 w-4" />
-              </Link>
-            </Button>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        </div>
       </div>
     </div>
   );

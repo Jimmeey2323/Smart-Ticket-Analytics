@@ -1,13 +1,13 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { motion, AnimatePresence } from 'framer-motion';
+import { AnimatePresence } from 'framer-motion';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { FieldDefinition, FieldType } from '@shared/ticket-schema';
 import { FIELD_DEFINITIONS } from '@shared/field-definitions';
 import { getCategoryIcon } from '@/lib/category-icons';
-import { ArrowRight, CheckCircle2 } from 'lucide-react';
+import { ArrowRight, CheckCircle2, ClipboardList, FileText } from 'lucide-react';
 
 interface CategorySelectorProps {
   onCategorySelect: (
@@ -280,32 +280,20 @@ export const CategorySelector: React.FC<CategorySelectorProps> = ({
         {/* Step 1: Category Selection */}
         <AnimatePresence mode="wait">
           {!category && (
-            <motion.div
-              key="category-selection"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              transition={{ duration: 0.3 }}
-              className="space-y-6"
-            >
-              <div className="text-center mb-8">
-                <motion.div
-                  className="inline-flex items-center justify-center w-12 h-12 rounded-2xl font-bold text-base bg-gradient-to-br from-blue-500 to-indigo-600 text-white shadow-lg mb-3"
-                  animate={{ scale: [1, 1.05, 1] }}
-                  transition={{ duration: 2, repeat: Infinity }}
-                >
-                  1
-                </motion.div>
-                <h2 className="text-2xl font-bold text-foreground">Select Ticket Category</h2>
-                <p className="text-sm text-muted-foreground mt-2">Choose the main category for your support ticket</p>
+            <div key="category-selection" className="space-y-6">
+              <div className="mb-8">
+                <div className="flex items-center gap-4 mb-3">
+                  <div className="flex-shrink-0 flex items-center justify-center w-12 h-12 rounded-2xl font-bold text-base bg-gradient-to-br from-blue-500 to-indigo-600 text-white shadow-sm">
+                    <ClipboardList className="w-6 h-6" />
+                  </div>
+                  <div className="flex flex-col">
+                    <h2 className="text-2xl font-bold text-foreground text-left">Select Ticket Category</h2>
+                    <p className="text-sm text-muted-foreground mt-1 text-left">Choose the main category for your support ticket</p>
+                  </div>
+                </div>
               </div>
 
-              <motion.div 
-                className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.3 }}
-              >
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                 {categories
                   .filter(cat => (cat.name ?? '').toLowerCase() !== 'global')
                   .map((cat, idx) => {
@@ -313,37 +301,31 @@ export const CategorySelector: React.FC<CategorySelectorProps> = ({
                     const Icon = getCategoryIcon(cat.icon);
 
                     return (
-                      <motion.div
+                      <div
                         key={cat.id}
-                        initial={{ opacity: 0, y: 20, scale: 0.9 }}
-                        animate={{ opacity: 1, y: 0, scale: 1 }}
-                        transition={{ duration: 0.3, delay: idx * 0.08 }}
-                        whileHover={{ y: -6, scale: 1.02 }}
-                        whileTap={{ scale: 0.97 }}
                         onClick={() => handleCategoryChange(cat.id)}
-                        className="group relative cursor-pointer transition-all"
+                        className="group relative cursor-pointer transition-transform duration-150 hover:-translate-y-1 hover:scale-105"
                       >
-                        {/* Glassmorphic background */}
-                        <div className="absolute inset-0 rounded-lg bg-muted/80 backdrop-blur-md border border-border group-hover:bg-muted transition-all duration-300" />
+                        {/* Glassmorphic background (pointer-events-none so clicks hit the wrapper) */}
+                        <div className="absolute inset-0 rounded-lg bg-muted/80 backdrop-blur-md border border-border group-hover:bg-muted transition-all duration-300 pointer-events-none" />
 
-                        {/* Thick left colored border */}
+                        {/* Thick left colored border (visual only) */}
                         <div
-                          className="absolute left-0 top-0 bottom-0 w-1.5 rounded-l-lg transition-all duration-300"
+                          className="absolute left-0 top-0 bottom-0 w-1.5 rounded-l-lg transition-all duration-300 pointer-events-none"
                           style={{ backgroundColor: color }}
                         />
 
                         {/* Content container */}
                         <div className="relative p-4 flex items-center gap-3 h-24">
                           {/* Icon with animation */}
-                          <motion.div
-                            className="flex-shrink-0 flex items-center justify-center w-12 h-12 rounded-lg transition-all"
+                          <div
+                            className="flex-shrink-0 flex items-center justify-center w-12 h-12 rounded-lg transition-transform duration-150"
                             style={{
-                              background: `linear-gradient(135deg, ${toRgba(color, 0.2)} 0%, ${toRgba(color, 0.08)} 100%)`,
+                              background: `linear-gradient(135deg, ${toRgba(color, 0.18)} 0%, ${toRgba(color, 0.06)} 100%)`,
                             }}
-                            whileHover={{ scale: 1.1, rotate: 8 }}
                           >
                             <Icon className="w-6 h-6" style={{ color }} />
-                          </motion.div>
+                          </div>
 
                           {/* Text content */}
                           <div className="flex-1 min-w-0">
@@ -356,56 +338,42 @@ export const CategorySelector: React.FC<CategorySelectorProps> = ({
                           </div>
 
                           {/* Analytics on hover */}
-                          <motion.div
-                            className="flex-shrink-0 flex flex-col items-end gap-1"
-                            initial={{ opacity: 0, x: 10 }}
-                            whileHover={{ opacity: 1, x: 0 }}
-                            transition={{ duration: 0.2 }}
-                          >
+                          <div className="flex-shrink-0 flex flex-col items-end gap-1 opacity-90">
                             <div className="text-xs font-semibold text-foreground">12 tickets</div>
                             <div className="text-xs text-muted-foreground">Avg: 2.4h</div>
-                          </motion.div>
+                          </div>
                         </div>
-                      </motion.div>
+                      </div>
                     );
                   })}
-              </motion.div>
-            </motion.div>
+              </div>
+            </div>
           )}
         </AnimatePresence>
 
         {/* Step 2: Subcategory Selection */}
         <AnimatePresence mode="wait">
           {category && (
-            <motion.div
-              key="subcategories"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              transition={{ duration: 0.3 }}
-              className="space-y-6"
-            >
-              <div className="text-center mb-8 relative">
-                <motion.div
-                  className={`inline-flex items-center justify-center w-12 h-12 rounded-2xl font-bold text-base ${subCategory ? 'bg-gradient-to-br from-green-500 to-green-600' : 'bg-gradient-to-br from-blue-500 to-indigo-600'} text-white shadow-lg mb-3`}
-                  animate={{ scale: [1, 1.05, 1] }}
-                  transition={{ duration: 2, repeat: Infinity }}
-                >
-                  {subCategory ? <CheckCircle2 className="w-7 h-7" /> : '2'}
-                </motion.div>
-                <h2 className="text-2xl font-bold text-foreground">Select Subcategory</h2>
-                <p className="text-sm text-muted-foreground mt-2">Choose the specific issue type within <span className="font-semibold text-foreground">{selectedCategoryData?.name}</span></p>
-                <motion.button
+            <div key="subcategories" className="space-y-6">
+              <div className="mb-8 relative">
+                <div className="flex items-center gap-4 mb-3">
+                  <div className={`flex-shrink-0 flex items-center justify-center w-12 h-12 rounded-2xl font-bold text-base ${subCategory ? 'bg-gradient-to-br from-blue-600 to-purple-700' : 'bg-gradient-to-br from-blue-500 to-indigo-600'} text-white shadow-sm`}>
+                    {subCategory ? <CheckCircle2 className="w-7 h-7" /> : <FileText className="w-6 h-6" />}
+                  </div>
+                  <div className="flex flex-col">
+                    <h2 className="text-2xl font-bold text-foreground text-left">Select Subcategory</h2>
+                    <p className="text-sm text-muted-foreground mt-1 text-left">Choose the specific issue type within <span className="font-semibold text-foreground">{selectedCategoryData?.name}</span></p>
+                  </div>
+                </div>
+                <button
                   onClick={() => {
                     setCategory('');
                     setSubCategory('');
                   }}
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  className="absolute right-0 top-0 px-4 py-2 rounded-lg text-sm font-medium bg-muted hover:bg-muted/80 border border-border text-foreground transition-all shadow-sm backdrop-blur-sm"
+                  className="absolute right-0 top-0 px-4 py-2 rounded-lg text-sm font-medium bg-muted hover:bg-muted/80 border border-border text-foreground transition-transform hover:scale-105 active:scale-95 shadow-sm backdrop-blur-sm"
                 >
                   ← Change Category
-                </motion.button>
+                </button>
               </div>
 
               {subCategoriesLoading ? (
@@ -418,52 +386,39 @@ export const CategorySelector: React.FC<CategorySelectorProps> = ({
                   ))}
                 </div>
               ) : (
-                <motion.div
-                  className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ duration: 0.3 }}
-                >
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                   {uniqueSubCategories.map((subCat, idx) => {
                     const isSubSelected = subCat.id === subCategory;
                     const fieldCount = extractEmbeddedFields(subCat).length;
                     const catColor = getCategoryColor(selectedCategoryData);
 
                     return (
-                      <motion.div
+                      <div
                         key={subCat.id}
-                        initial={{ opacity: 0, y: 20, scale: 0.9 }}
-                        animate={{ opacity: 1, y: 0, scale: 1 }}
-                        transition={{ duration: 0.3, delay: idx * 0.08 }}
-                        whileHover={{ y: -6, scale: 1.02 }}
-                        whileTap={{ scale: 0.97 }}
                         onClick={() => handleSubCategoryChange(subCat.id)}
-                        className="group relative cursor-pointer transition-all"
+                        className="group relative cursor-pointer transition-transform duration-150 hover:-translate-y-1 hover:scale-105"
                       >
-                        {/* Glassmorphic background - highlighted on selection */}
+                        {/* Glassmorphic background - highlighted on selection (pointer-events-none so wrapper handles clicks) */}
                         <div className={`absolute inset-0 rounded-lg transition-all duration-300 ${
                           isSubSelected 
                             ? 'bg-muted border border-border' 
                             : 'bg-muted/80 border border-border group-hover:bg-muted'
-                        }`} />
+                        } pointer-events-none`} />
 
-                        {/* Thick left colored border */}
+                        {/* Thick left colored border (visual only) */}
                         <div
-                          className={`absolute left-0 top-0 bottom-0 w-1.5 rounded-l-lg transition-all duration-300 ${isSubSelected ? 'w-2' : ''}`}
+                          className={`absolute left-0 top-0 bottom-0 w-1.5 rounded-l-lg transition-all duration-300 ${isSubSelected ? 'w-2' : ''} pointer-events-none`}
                           style={{ backgroundColor: catColor }}
                         />
 
                         {/* Content container */}
                         <div className="relative p-4 flex items-center gap-3 h-24">
                           {/* Icon with animation */}
-                          <motion.div
-                            className="flex-shrink-0 flex items-center justify-center w-12 h-12 rounded-lg transition-all"
+                          <div
+                            className="flex-shrink-0 flex items-center justify-center w-12 h-12 rounded-lg transition-transform duration-150"
                             style={{
-                              background: `linear-gradient(135deg, ${toRgba(catColor, 0.2)} 0%, ${toRgba(catColor, 0.08)} 100%)`,
+                              background: `linear-gradient(135deg, ${toRgba(catColor, 0.18)} 0%, ${toRgba(catColor, 0.06)} 100%)`,
                             }}
-                            animate={{ rotate: isSubSelected ? 360 : 0 }}
-                            transition={{ duration: 0.6 }}
-                            whileHover={{ scale: 1.1, rotate: 8 }}
                           >
                             {getCategoryIcon(selectedCategoryData?.icon) && 
                               React.createElement(getCategoryIcon(selectedCategoryData?.icon), {
@@ -471,20 +426,16 @@ export const CategorySelector: React.FC<CategorySelectorProps> = ({
                                 style: { color: catColor },
                               })
                             }
-                          </motion.div>
+                          </div>
 
                           {/* Text content */}
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2">
                               <h3 className="font-bold text-sm text-foreground">{subCat.name}</h3>
                               {isSubSelected && (
-                                <motion.div
-                                  initial={{ scale: 0, rotate: -180 }}
-                                  animate={{ scale: 1, rotate: 0 }}
-                                  transition={{ type: 'spring', stiffness: 200 }}
-                                >
+                                <div>
                                   <CheckCircle2 className="w-4 h-4 text-green-500 flex-shrink-0" />
-                                </motion.div>
+                                </div>
                               )}
                             </div>
                             {subCat.description && (
@@ -493,30 +444,20 @@ export const CategorySelector: React.FC<CategorySelectorProps> = ({
                           </div>
 
                           {/* Analytics on hover */}
-                          <motion.div
-                            className="flex-shrink-0 flex flex-col items-end gap-1"
-                            initial={{ opacity: 0, x: 10 }}
-                            whileHover={{ opacity: 1, x: 0 }}
-                            transition={{ duration: 0.2 }}
-                          >
+                          <div className="flex-shrink-0 flex flex-col items-end gap-1 opacity-90">
                             <div className="text-xs font-semibold text-foreground">{fieldCount} fields</div>
                             <div className="text-xs text-muted-foreground">Avg: 8 min</div>
-                          </motion.div>
+                          </div>
                         </div>
-                      </motion.div>
+                      </div>
                     );
                   })}
-                </motion.div>
+                </div>
               )}
 
               {/* Field Preview */}
               {selectedSubCategoryData && (
-                <motion.div
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.4, delay: 0.15 }}
-                  className="mt-8 p-6 rounded-2xl bg-muted/50 backdrop-blur-md border border-border transition-all"
-                >
+                <div className="mt-8 p-6 rounded-2xl bg-muted/50 backdrop-blur-md border border-border transition-all">
                   <div className="flex items-center gap-2 mb-4">
                     <h4 className="text-base font-bold text-foreground">Available Fields</h4>
                     <Badge variant="secondary" className="text-xs">
@@ -539,12 +480,7 @@ export const CategorySelector: React.FC<CategorySelectorProps> = ({
                       const deduped = Array.from(new Map(all.map(f => [f.id, f])).values());
                       return deduped.filter(f => !f.isHidden);
                     })().map((field, idx) => (
-                      <motion.div
-                        key={field.id}
-                        initial={{ opacity: 0, scale: 0.8, y: 10 }}
-                        animate={{ opacity: 1, scale: 1, y: 0 }}
-                        transition={{ duration: 0.2, delay: idx * 0.04 }}
-                      >
+                      <div key={field.id} className="transition-opacity duration-200">
                         <Badge 
                           variant={field.isRequired ? "default" : "outline"}
                           className="text-xs font-semibold px-2.5 py-1"
@@ -552,12 +488,12 @@ export const CategorySelector: React.FC<CategorySelectorProps> = ({
                           {field.label}
                           {field.isRequired && <span className="ml-1.5 font-bold">*</span>}
                         </Badge>
-                      </motion.div>
+                      </div>
                     ))}
                   </div>
-                </motion.div>
+                </div>
               )}
-            </motion.div>
+            </div>
           )}
         </AnimatePresence>
       </div>

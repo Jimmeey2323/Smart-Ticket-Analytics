@@ -32,6 +32,7 @@ import {
   ChevronRight,
   AlertCircle,
 } from "lucide-react";
+import { useTheme } from "@/components/theme-provider";
 import { getCategoryIcon } from "@/lib/category-icons";
 import type { Ticket } from "@shared/schema";
 
@@ -81,6 +82,8 @@ function TicketCard({
   categories: ApiCategory[];
   compact?: boolean;
 }) {
+  const { theme } = useTheme();
+  const isDark = theme === 'dark' || (theme === 'system' && typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches);
   const priorityColors: Record<string, string> = {
     critical: "priority-critical",
     high: "priority-high",
@@ -102,7 +105,7 @@ function TicketCard({
   if (compact) {
     return (
       <Link href={`/tickets/${ticket.id}`}>
-        <Card className="cursor-pointer hover-elevate active-elevate-2 transition-smooth mb-2">
+        <Card className={`mb-2 relative overflow-hidden border backdrop-blur-lg transition-all duration-200 ${isDark ? 'bg-slate-800/50 border-blue-700/30 hover:shadow-md' : 'bg-white/80 border-blue-100/60 hover:shadow-sm'}`}>
           <CardContent className="p-3">
             <div className="flex items-start gap-2">
               <div className={`w-2 h-2 rounded-full mt-1.5 ${priorityColors[ticket.priority]}`} />
@@ -121,46 +124,24 @@ function TicketCard({
 
   return (
     <Link href={`/tickets/${ticket.id}`}>
-      <Card className="cursor-pointer hover-elevate active-elevate-2 transition-smooth">
+      <Card className={`relative overflow-hidden border backdrop-blur-lg transition-all duration-200 ${isDark ? 'bg-slate-800/50 border-blue-700/30 hover:shadow-md' : 'bg-white/80 border-blue-100/60 hover:shadow-sm'}`}>
+        <div className={`absolute top-0 left-0 right-0 h-1 bg-gradient-to-r ${isDark ? 'from-blue-700 via-purple-600 to-blue-700' : 'from-blue-400 via-indigo-400 to-blue-400'}`} />
         <CardContent className="p-4">
           <div className="flex items-start justify-between gap-4">
             <div className="flex items-start gap-3 flex-1 min-w-0">
               <div className={`w-2 h-full min-h-[48px] rounded-full ${priorityColors[ticket.priority]}`} />
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 mb-1 flex-wrap">
-                  <span className="text-xs font-mono text-muted-foreground">
-                    {ticket.ticketNumber}
-                  </span>
-                  <Badge variant="secondary" className={`text-xs ${statusStyles[ticket.status]}`}>
-                    {ticket.status.replace("_", " ")}
-                  </Badge>
-                  {ticket.isEscalated && (
-                    <Badge variant="destructive" className="text-xs">
-                      Escalated
-                    </Badge>
-                  )}
+                  <span className="text-xs font-mono text-muted-foreground">{ticket.ticketNumber}</span>
+                  <Badge variant="secondary" className={`text-xs ${statusStyles[ticket.status]}`}>{ticket.status.replace("_", " ")}</Badge>
+                  {ticket.isEscalated && <Badge variant="destructive" className="text-xs">Escalated</Badge>}
                 </div>
                 <h3 className="font-medium text-sm mb-1">{ticket.title}</h3>
-                <p className="text-sm text-muted-foreground line-clamp-2">
-                  {ticket.description}
-                </p>
+                <p className="text-sm text-muted-foreground line-clamp-2">{ticket.description}</p>
                 <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground flex-wrap">
                   <span>{ticket.clientName}</span>
-                  {category && (
-                    <>
-                      <span className="opacity-50">-</span>
-                      <span>{category.name}</span>
-                    </>
-                  )}
-                  {ticket.slaDeadline && (
-                    <>
-                      <span className="opacity-50">-</span>
-                      <span className="flex items-center gap-1">
-                        <Clock className="h-3 w-3" />
-                        Due {new Date(ticket.slaDeadline).toLocaleDateString()}
-                      </span>
-                    </>
-                  )}
+                  {category && (<><span className="opacity-50">-</span><span>{category.name}</span></>)}
+                  {ticket.slaDeadline && (<><span className="opacity-50">-</span><span className="flex items-center gap-1"><Clock className="h-3 w-3" />Due {new Date(ticket.slaDeadline).toLocaleDateString()}</span></>)}
                 </div>
               </div>
             </div>
@@ -428,6 +409,8 @@ function TimelineView({ tickets }: { tickets: Ticket[] }) {
 }
 
 export default function Tickets() {
+  const { theme } = useTheme();
+  const isDark = theme === 'dark' || (theme === 'system' && typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches);
   const [location] = useLocation();
   const urlParams = new URLSearchParams(location.split("?")[1] || "");
   const viewParam = urlParams.get("view") as ViewType | null;
@@ -468,23 +451,48 @@ export default function Tickets() {
   };
 
   return (
-    <div className="space-y-6 app-container">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="page-title">Tickets</h1>
-          <p className="page-subtitle">
-            Manage and track all customer feedback tickets
-          </p>
+    <div className={`min-h-screen transition-colors duration-300 ${
+      isDark 
+        ? 'bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950' 
+        : 'bg-gradient-to-br from-slate-50 via-blue-50 to-slate-100'
+    }`}>
+      <div className={`border-b transition-colors duration-200 ${isDark ? 'border-slate-700/50 bg-slate-800/50' : 'border-blue-100/40 bg-blue-50/30'}`}>
+        <div className="app-container px-6 py-5">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-2xl font-black tracking-tight accent-gradient-text">Tickets</h1>
+              <p className={`text-sm font-semibold tracking-wide ${isDark ? 'text-gray-400' : 'text-blue-700'}`}>All Tickets</p>
+            </div>
+          </div>
         </div>
-        <Button asChild data-testid="button-new-ticket">
-          <Link href="/tickets/new">
-            <Plus className="mr-2 h-4 w-4" />
-            New Ticket
-          </Link>
-        </Button>
       </div>
+      
+      <div className="app-container space-y-6 pt-8">
+        {/* Content Section */}
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <p className={`text-lg font-semibold ${isDark ? 'text-gray-300' : 'text-slate-600'}`}>
+              Manage and track all customer feedback tickets
+            </p>
+          </div>
+          <Button asChild data-testid="button-new-ticket" className={`px-6 py-3 text-base font-semibold rounded-xl transition-all duration-300 accent-gradient-bar text-white hover:shadow-2xl ${
+            isDark
+              ? 'hover:shadow-blue-500/40'
+              : 'hover:shadow-blue-400/40'
+          }`}>
+            <Link href="/tickets/new" className="flex items-center gap-2 whitespace-nowrap">
+              <Plus className="h-5 w-5" />
+              New Ticket
+            </Link>
+          </Button>
+        </div>
 
-      <Card>
+      <Card className={`relative overflow-hidden backdrop-blur-xl border transition-all duration-500 ${
+        isDark
+          ? 'bg-slate-800/40 border-slate-700/50 hover:border-slate-600/80'
+          : 'bg-white/60 border-slate-200/60 hover:border-slate-300/80'
+      }`}>
+        <div className="absolute top-0 left-0 right-0 h-1 accent-gradient-bar" />
         <CardContent className="p-4">
           <div className="flex flex-col lg:flex-row gap-4">
             <div className="relative flex-1">
@@ -583,10 +591,11 @@ export default function Tickets() {
         </div>
       </Tabs>
 
-      <div className="flex items-center justify-between text-sm text-muted-foreground">
-        <span>
-          Showing {filteredTickets.length} of {tickets.length} tickets
-        </span>
+        <div className="flex items-center justify-between text-sm text-muted-foreground">
+          <span>
+            Showing {filteredTickets.length} of {tickets.length} tickets
+          </span>
+        </div>
       </div>
     </div>
   );

@@ -112,6 +112,43 @@
   --destructive-border: hsl(var(--destructive));
   --destructive-border: hsl(from hsl(var(--destructive)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
 }
+.accent-gradient-text {
+  /* Dark navy blue -> brighter blue accent gradient */
+  background: linear-gradient(90deg, #090856 0%, #1310ba 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.accent-gradient-bar {
+  /* Dark navy blue -> brighter blue accent gradient for bar elements */
+  background: linear-gradient(90deg, #090856 0%, #1310ba 100%);
+}
+
+/* Accent variables to use across the app (navy blue -> bright blue) */
+.accent-stops {
+  /* two-stop accent: dark navy blue -> bright blue */
+  --accent-stop-1: 9 8 86; /* #090856 */
+  --accent-stop-2: 19 16 186; /* #1310ba */
+}
+
+.accent-border {
+  border-image-source: linear-gradient(90deg, #090856, #1310ba);
+  border-image-slice: 1;
+}
+
+.accent-btn {
+  background-image: linear-gradient(90deg, #090856 0%, #1310ba 100%);
+  color: white;
+}
+
+.step-icon-contrast {
+  background: linear-gradient(90deg, rgba(0,0,0,0.08), rgba(3,39,76,0.08));
+  border-radius: 9999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
 
 .dark {
   --button-outline: rgba(255,255,255, .10);

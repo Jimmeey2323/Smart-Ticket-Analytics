@@ -23,7 +23,7 @@ import { motion, AnimatePresence, useMotionTemplate, useMotionValue, animate } f
 import { useTheme } from "@/components/theme-provider";
 
 const COLORS_TOP = ['#3b82f6', '#8b5cf6', '#ec4899', '#06b6d4'];
-const COLORS_TOP_LIGHT = ['#93c5fd', '#c4b5fd', '#f472b6', '#22d3ee'];
+const COLORS_TOP_LIGHT = ['#2563eb', '#7c3aed', '#db2777', '#0891b2'];
 
 export default function Landing() {
   const [showAuthForm, setShowAuthForm] = useState(false);
@@ -126,8 +126,12 @@ export default function Landing() {
   ];
 
   return (
-    <div className="min-h-screen bg-background overflow-hidden">
-      <header className="sticky top-0 z-50 w-full border-b bg-background/80 backdrop-blur-xl supports-[backdrop-filter]:bg-background/60">
+    <div className={`min-h-screen overflow-hidden ${isDark ? 'bg-background' : 'bg-white'}`}>
+      <header className={`sticky top-0 z-50 w-full border-b backdrop-blur-xl supports-[backdrop-filter]:bg-background/60 ${
+        isDark
+          ? 'bg-background/80 border-gray-800'
+          : 'bg-white/95 border-blue-200'
+      }`}>
         <div className="container mx-auto flex h-16 items-center justify-between px-4">
           <motion.div 
             className="flex items-center gap-3"
@@ -136,7 +140,7 @@ export default function Landing() {
             transition={{ duration: 0.5 }}
           >
             <img src="/logo.png" alt="Physique 57 India" className="h-9 w-auto" />
-            <span className="font-semibold hidden sm:inline text-foreground">Physique 57 India</span>
+            <span className="font-bold hidden sm:inline text-foreground tracking-tight">Support Hub</span>
           </motion.div>
           <motion.div 
             className="flex items-center gap-2"
@@ -165,7 +169,9 @@ export default function Landing() {
       <AnimatePresence>
         {showAuthForm && (
           <motion.div 
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-md"
+            className={`fixed inset-0 z-50 flex items-center justify-center backdrop-blur-md ${
+              isDark ? 'bg-black/50' : 'bg-black/30'
+            }`}
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -181,19 +187,27 @@ export default function Landing() {
             >
               <motion.button
                 onClick={() => setShowAuthForm(false)}
-                className="absolute -top-10 -right-10 z-10 p-2 rounded-full hover:bg-white/10 transition-colors text-foreground"
+                className={`absolute -top-10 -right-10 z-10 p-2 rounded-full transition-colors ${
+                  isDark
+                    ? 'hover:bg-white/10 text-foreground'
+                    : 'hover:bg-gray-200 text-gray-800'
+                }`}
                 whileHover={{ scale: 1.1 }}
                 whileTap={{ scale: 0.9 }}
               >
                 <X className="w-5 h-5" />
               </motion.button>
-              <Card className="w-full max-w-md mx-4 border-2 border-blue-500/20 shadow-2xl">
+              <Card className={`w-full max-w-md mx-4 border-2 shadow-2xl ${
+                isDark
+                  ? 'border-blue-500/20'
+                  : 'border-blue-300/50 bg-white'
+              }`}>
                 <CardHeader>
-                  <CardTitle className="flex items-center gap-2 text-foreground">
+                  <CardTitle className={`flex items-center gap-2 ${isDark ? 'text-foreground' : 'text-gray-900'}`}>
                     <Sparkles className="w-5 h-5" />
                     {isSignUp ? "Create Account" : "Sign In"}
                   </CardTitle>
-                  <CardDescription>
+                  <CardDescription className={isDark ? '' : 'text-gray-600'}>
                     {isSignUp 
                       ? "Enter your email to create a new account" 
                       : "Enter your email and password to sign in"}
@@ -290,24 +304,53 @@ export default function Landing() {
           style={{ backgroundImage }}
           className="relative min-h-screen flex items-center justify-center overflow-hidden px-4 py-12"
         >
-          {/* Animated background stars */}
+          {/* Animated gradient orbs */}
           <div className="absolute inset-0 z-0 overflow-hidden">
-            {[...Array(100)].map((_, i) => (
+            {/* Large animated blur circles */}
+            <motion.div
+              className={`absolute w-96 h-96 rounded-full blur-3xl opacity-20 ${isDark ? 'bg-blue-500' : 'bg-blue-300'}`}
+              style={{ top: '-100px', left: '-100px' }}
+              animate={{
+                x: [0, 50, 0],
+                y: [0, 50, 0],
+              }}
+              transition={{
+                duration: 20,
+                repeat: Infinity,
+                ease: 'easeInOut',
+              }}
+            />
+            <motion.div
+              className={`absolute w-96 h-96 rounded-full blur-3xl opacity-20 ${isDark ? 'bg-purple-500' : 'bg-purple-300'}`}
+              style={{ bottom: '-100px', right: '-100px' }}
+              animate={{
+                x: [0, -50, 0],
+                y: [0, -50, 0],
+              }}
+              transition={{
+                duration: 25,
+                repeat: Infinity,
+                ease: 'easeInOut',
+              }}
+            />
+            {/* Animated background stars */}
+            {[...Array(60)].map((_, i) => (
               <motion.div
                 key={i}
-                className="absolute rounded-full bg-white"
+                className={`absolute rounded-full ${isDark ? 'bg-white' : 'bg-blue-600/30'}`}
                 style={{
-                  width: Math.random() * 3 + 'px',
-                  height: Math.random() * 3 + 'px',
+                  width: Math.random() * 2.5 + 'px',
+                  height: Math.random() * 2.5 + 'px',
                   top: Math.random() * 100 + '%',
                   left: Math.random() * 100 + '%',
-                  opacity: Math.random() * 0.5 + 0.1,
+                  opacity: Math.random() * 0.6 + 0.1,
                 }}
                 animate={{
-                  opacity: [0.1, 0.5, 0.1],
+                  opacity: [Math.random() * 0.6 + 0.1, Math.random() * 0.8 + 0.3, Math.random() * 0.6 + 0.1],
+                  scale: [1, 1.2, 1],
                 }}
                 transition={{
-                  duration: Math.random() * 3 + 2,
+                  duration: Math.random() * 4 + 3,
                   repeat: Infinity,
                   delay: Math.random() * 2,
                 }}
@@ -321,59 +364,137 @@ export default function Landing() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6 }}
-              className="mb-6 inline-block rounded-full bg-gradient-to-r from-blue-600/20 to-purple-600/20 backdrop-blur-md border border-blue-400/30 px-6 py-2.5 text-sm font-medium shadow-lg shadow-blue-500/20"
+              className={`mb-8 inline-flex items-center gap-2 rounded-full backdrop-blur-md border px-5 py-2.5 text-xs font-bold tracking-wider uppercase shadow-lg ${
+                isDark
+                  ? 'bg-blue-600/10 border-blue-500/30 shadow-blue-500/20 text-blue-300'
+                  : 'bg-blue-50 border-blue-300/60 shadow-blue-200/30 text-blue-700'
+              }`}
             >
-              ✨ Smart Ticket Management • AI Analytics • Real-time Insights
+              <motion.div
+                animate={{ rotate: 360 }}
+                transition={{ duration: 3, repeat: Infinity, ease: 'linear' }}
+              >
+                ⚙️
+              </motion.div>
+              Intelligent Support Management
             </motion.div>
 
             {/* Main Heading */}
             <motion.div
-              initial={{ opacity: 0, y: 30 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.8, delay: 0.2 }}
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.8, delay: 0.2, type: 'spring', stiffness: 100 }}
               className="mb-8"
             >
-              <h1 className="text-4xl font-bold tracking-tight sm:text-5xl md:text-6xl bg-gradient-to-br from-white via-blue-200 to-purple-200 bg-clip-text text-transparent">
-                Smart Ticket Management<br />for Physique 57 India
-              </h1>
+              <div className="relative inline-block">
+                {/* Animated gradient background behind title - only visible in light mode */}
+                {!isDark && (
+                  <motion.div
+                    className={`absolute inset-0 rounded-2xl blur-2xl opacity-30 bg-gradient-to-r from-blue-300 to-purple-300`}
+                    animate={{
+                      opacity: [0.2, 0.4, 0.2],
+                    }}
+                    transition={{
+                      duration: 4,
+                      repeat: Infinity,
+                      ease: 'easeInOut',
+                    }}
+                  />
+                )}
+                <h1 className={`relative text-5xl font-black tracking-tighter sm:text-6xl md:text-8xl leading-tight ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                  {/* Animate each word */}
+                  <motion.span
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.6, delay: 0.3, type: 'spring', stiffness: 80 }}
+                    className="block bg-gradient-to-r from-blue-600 via-purple-600 to-blue-600 bg-clip-text text-transparent"
+                  >
+                    Enterprise
+                  </motion.span>
+                  <motion.span
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.6, delay: 0.5, type: 'spring', stiffness: 80 }}
+                    className="block"
+                  >
+                    Ticket & Support
+                  </motion.span>
+                  <motion.span
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.6, delay: 0.7, type: 'spring', stiffness: 80 }}
+                    className="block"
+                  >
+                    Management Platform
+                  </motion.span>
+                </h1>
+              </div>
             </motion.div>
 
             {/* Subtitle */}
             <motion.p
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.8, delay: 0.4 }}
-              className="mb-12 max-w-3xl mx-auto text-lg text-gray-200 leading-relaxed"
+              transition={{ duration: 0.8, delay: 1 }}
+              className={`mb-6 max-w-2xl mx-auto text-xl leading-relaxed font-semibold ${
+                isDark ? 'text-gray-200' : 'text-slate-700'
+              }`}
             >
-              Transform your customer feedback into actionable insights. Track, analyze, and resolve tickets efficiently with AI-powered categorization and intelligent team routing.
+              Streamline support operations with intelligent routing, real-time analytics, and comprehensive ticket lifecycle management.
+            </motion.p>
+            <motion.p
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.8, delay: 1.2 }}
+              className={`mb-12 max-w-2xl mx-auto text-base ${
+                isDark ? 'text-gray-400' : 'text-slate-600'
+              }`}
+            >
+              Purpose-built for high-volume support teams at Physique 57 India
             </motion.p>
 
             {/* CTA Buttons */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.8, delay: 0.6 }}
-              className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-12"
+              transition={{ duration: 0.8, delay: 1.4 }}
+              className="flex flex-col sm:flex-row items-center justify-center gap-5 mb-16"
             >
-              <Button 
-                size="lg" 
-                onClick={handleLogin} 
-                data-testid="button-get-started"
-                className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-semibold px-8 shadow-lg shadow-purple-500/50 hover:shadow-purple-600/70 transition-all duration-300"
+              <motion.div
+                whileHover={{ scale: 1.08, y: -2 }}
+                whileTap={{ scale: 0.95 }}
               >
-                Get Started
-                <ArrowRight className="ml-2 h-4 w-4" />
-              </Button>
-              <Button 
-                size="lg" 
-                variant="outline" 
-                asChild
-                className="border-2 border-blue-400/30 hover:bg-blue-500/10"
+                <Button 
+                  size="lg" 
+                  onClick={handleLogin} 
+                  data-testid="button-get-started"
+                  className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-bold px-10 py-6 rounded-lg shadow-xl shadow-blue-600/40 hover:shadow-2xl hover:shadow-blue-600/60 transition-all duration-300 text-base"
+                >
+                  Access Platform
+                  <motion.span
+                    animate={{ x: [0, 6, 0] }}
+                    transition={{ duration: 1.5, repeat: Infinity }}
+                    className="ml-3 inline-block"
+                  >
+                    <ArrowRight className="h-5 w-5" />
+                  </motion.span>
+                </Button>
+              </motion.div>
+              <motion.div
+                whileHover={{ scale: 1.08, y: -2 }}
+                whileTap={{ scale: 0.95 }}
               >
-                <a href="#features">
-                  Learn More
-                </a>
-              </Button>
+                <Button 
+                  size="lg" 
+                  variant="outline" 
+                  asChild
+                  className={`border-2 font-bold px-10 py-6 rounded-lg text-base transition-all duration-300 ${isDark ? 'border-blue-500/50 text-blue-300 hover:bg-blue-500/10' : 'border-blue-400 text-blue-700 hover:bg-blue-100'}`}
+                >
+                  <a href="#features">
+                    View Features
+                  </a>
+                </Button>
+              </motion.div>
             </motion.div>
 
             {/* Stats Preview */}
@@ -383,29 +504,49 @@ export default function Landing() {
               transition={{ duration: 0.8, delay: 0.8 }}
               className="grid grid-cols-3 md:grid-cols-4 gap-4 max-w-2xl mx-auto"
             >
-              <div className="p-4 rounded-xl bg-white/5 backdrop-blur-lg border border-white/10 hover:border-blue-400/50 transition-all duration-300">
-                <div className="text-xl md:text-2xl font-bold text-blue-400">13</div>
-                <div className="text-xs text-gray-300">Categories</div>
+              <div className={`p-4 rounded-xl backdrop-blur-lg border transition-all duration-300 ${
+                isDark
+                  ? 'bg-white/5 border-white/10 hover:border-blue-400/50'
+                  : 'bg-blue-50/60 border-blue-200/60 hover:border-blue-400/80'
+              }`}>
+                <div className={`text-xl md:text-2xl font-bold ${isDark ? 'text-blue-400' : 'text-blue-700'}`}>13</div>
+                <div className={`text-xs ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>Categories</div>
               </div>
-              <div className="p-4 rounded-xl bg-white/5 backdrop-blur-lg border border-white/10 hover:border-purple-400/50 transition-all duration-300">
-                <div className="text-xl md:text-2xl font-bold text-purple-400">100+</div>
-                <div className="text-xs text-gray-300">Fields</div>
+              <div className={`p-4 rounded-xl backdrop-blur-lg border transition-all duration-300 ${
+                isDark
+                  ? 'bg-white/5 border-white/10 hover:border-purple-400/50'
+                  : 'bg-purple-50/60 border-purple-200/60 hover:border-purple-400/80'
+              }`}>
+                <div className={`text-xl md:text-2xl font-bold ${isDark ? 'text-purple-400' : 'text-purple-700'}`}>100+</div>
+                <div className={`text-xs ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>Fields</div>
               </div>
-              <div className="p-4 rounded-xl bg-white/5 backdrop-blur-lg border border-white/10 hover:border-cyan-400/50 transition-all duration-300">
-                <div className="text-xl md:text-2xl font-bold text-cyan-400">8</div>
-                <div className="text-xs text-gray-300">Locations</div>
+              <div className={`p-4 rounded-xl backdrop-blur-lg border transition-all duration-300 ${
+                isDark
+                  ? 'bg-white/5 border-white/10 hover:border-cyan-400/50'
+                  : 'bg-cyan-50/60 border-cyan-200/60 hover:border-cyan-400/80'
+              }`}>
+                <div className={`text-xl md:text-2xl font-bold ${isDark ? 'text-cyan-400' : 'text-cyan-700'}`}>8</div>
+                <div className={`text-xs ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>Locations</div>
               </div>
-              <div className="p-4 rounded-xl bg-white/5 backdrop-blur-lg border border-white/10 hover:border-pink-400/50 transition-all duration-300">
-                <div className="text-xl md:text-2xl font-bold text-pink-400">AI</div>
-                <div className="text-xs text-gray-300">Powered</div>
+              <div className={`p-4 rounded-xl backdrop-blur-lg border transition-all duration-300 ${
+                isDark
+                  ? 'bg-white/5 border-white/10 hover:border-pink-400/50'
+                  : 'bg-pink-50/60 border-pink-200/60 hover:border-pink-400/80'
+              }`}>
+                <div className={`text-xl md:text-2xl font-bold ${isDark ? 'text-pink-400' : 'text-pink-700'}`}>AI</div>
+                <div className={`text-xs ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>Powered</div>
               </div>
             </motion.div>
           </div>
         </motion.section>
 
         {/* Stats Section */}
-        <section className="border-y border-blue-500/20 bg-gradient-to-b from-background via-blue-950/10 to-background backdrop-blur-xl">
-          <div className="container mx-auto px-4 py-16">
+        <section className={`border-y backdrop-blur-xl ${
+          isDark
+            ? 'border-blue-500/20 bg-gradient-to-b from-background via-blue-950/10 to-background'
+            : 'border-blue-200 bg-gradient-to-b from-blue-50/50 via-white to-white'
+        }`}>
+          <div className="container mx-auto px-4 py-20">
             <motion.div 
               className="grid grid-cols-2 md:grid-cols-4 gap-6"
               initial={{ opacity: 0 }}
@@ -425,10 +566,18 @@ export default function Landing() {
                   whileInView={{ opacity: 1, y: 0 }}
                   transition={{ delay: idx * 0.1 }}
                   viewport={{ once: true }}
-                  className="text-center p-6 rounded-2xl bg-white/5 backdrop-blur-lg border border-blue-400/20 hover:border-blue-400/50 hover:bg-blue-500/10 transition-all duration-300"
+                  className={`text-center p-6 rounded-2xl backdrop-blur-lg border transition-all duration-300 ${
+                    isDark
+                      ? 'bg-white/5 border-blue-400/20 hover:border-blue-400/50 hover:bg-blue-500/10'
+                      : 'bg-white border-blue-200 hover:border-blue-400 hover:bg-blue-50/50'
+                  }`}
                 >
-                  <div className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">{stat.num}</div>
-                  <div className="text-sm text-gray-300 mt-2">{stat.label}</div>
+                  <div className={`text-3xl md:text-4xl font-bold bg-gradient-to-r ${
+                    isDark
+                      ? 'from-blue-400 to-purple-400'
+                      : 'from-blue-700 to-purple-700'
+                  } bg-clip-text text-transparent`}>{stat.num}</div>
+                  <div className={`text-sm mt-2 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>{stat.label}</div>
                 </motion.div>
               ))}
             </motion.div>
@@ -436,7 +585,7 @@ export default function Landing() {
         </section>
 
         {/* Features Section */}
-        <section id="features" className="container mx-auto px-4 py-16 md:py-24">
+        <section id="features" className={`container mx-auto px-4 py-16 md:py-24 ${isDark ? '' : 'bg-white'}`}>
           <motion.div 
             className="text-center mb-16"
             initial={{ opacity: 0, y: 20 }}
@@ -444,11 +593,29 @@ export default function Landing() {
             transition={{ duration: 0.6 }}
             viewport={{ once: true }}
           >
-            <h2 className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
-              Powerful Features
+            <motion.div
+              initial={{ opacity: 0 }}
+              whileInView={{ opacity: 1 }}
+              transition={{ duration: 0.6 }}
+              className={`inline-block px-4 py-2 rounded-lg mb-6 text-xs font-bold tracking-wider uppercase ${
+                isDark
+                  ? 'bg-blue-600/10 text-blue-300'
+                  : 'bg-blue-100 text-blue-700'
+              }`}
+            >
+              Core Capabilities
+            </motion.div>
+            <h2 className={`text-4xl md:text-5xl font-black tracking-tight ${
+              isDark
+                ? 'text-white'
+                : 'text-slate-900'
+            }`}>
+              Built for Enterprise Operations
             </h2>
-            <p className="mt-4 text-gray-300 max-w-2xl mx-auto text-lg">
-              Everything you need to manage customer feedback effectively and improve service quality.
+            <p className={`mt-6 max-w-2xl mx-auto text-lg font-medium ${
+              isDark ? 'text-gray-400' : 'text-slate-600'
+            }`}>
+              Comprehensive tools designed for modern support teams handling high-volume customer interactions.
             </p>
           </motion.div>
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -461,17 +628,26 @@ export default function Landing() {
                 viewport={{ once: true }}
                 whileHover={{ y: -5 }}
               >
-                <Card className="relative overflow-hidden h-full bg-white/5 backdrop-blur-lg border border-blue-400/20 hover:border-blue-400/50 transition-all duration-300 hover:shadow-lg hover:shadow-blue-500/20">
+                <Card className={`relative overflow-hidden h-full backdrop-blur-lg border transition-all duration-300 group ${
+                  isDark
+                    ? 'bg-slate-800/40 border-blue-500/30 hover:border-blue-500/60 hover:shadow-lg hover:shadow-blue-500/20'
+                    : 'bg-white border-slate-200/80 hover:border-blue-400/80 hover:shadow-2xl hover:shadow-blue-200/40'
+                }`}>
+                  <div className={`absolute inset-0 opacity-0 group-hover:opacity-5 transition-opacity duration-300 ${isDark ? 'bg-blue-500' : 'bg-blue-300'}`} />
                   <CardHeader>
-                    <div className="flex items-center gap-4">
-                      <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-gradient-to-br from-blue-600/30 to-purple-600/30 border border-blue-400/50">
-                        <feature.icon className="h-6 w-6 text-blue-400" />
+                    <div className="flex items-start justify-between mb-2">
+                      <div className={`flex h-14 w-14 items-center justify-center rounded-xl border transition-all duration-300 group-hover:scale-110 ${
+                        isDark
+                          ? 'bg-gradient-to-br from-blue-600/40 to-blue-600/20 border-blue-500/50 group-hover:border-blue-400'
+                          : 'bg-gradient-to-br from-blue-100/80 to-blue-50/80 border-blue-300/60 group-hover:border-blue-400'
+                      }`}>
+                        <feature.icon className={`h-7 w-7 ${isDark ? 'text-blue-300' : 'text-blue-600'}`} />
                       </div>
-                      <CardTitle className="text-lg">{feature.title}</CardTitle>
                     </div>
+                    <CardTitle className={`text-lg font-bold leading-tight ${isDark ? 'text-white' : 'text-slate-900'}`}>{feature.title}</CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <CardDescription className="text-sm text-gray-300">
+                    <CardDescription className={`text-sm leading-relaxed ${isDark ? 'text-gray-400' : 'text-slate-600'}`}>
                       {feature.description}
                     </CardDescription>
                   </CardContent>
@@ -482,8 +658,12 @@ export default function Landing() {
         </section>
 
         {/* CTA Section */}
-        <section className="border-t border-blue-500/20 bg-gradient-to-b from-background via-purple-950/10 to-background backdrop-blur-xl">
-          <div className="container mx-auto px-4 py-16">
+        <section className={`border-t backdrop-blur-xl ${
+          isDark
+            ? 'border-blue-500/20 bg-gradient-to-b from-background via-purple-950/10 to-background'
+            : 'border-blue-200 bg-gradient-to-b from-white via-blue-50/30 to-white'
+        }`}>
+          <div className="container mx-auto px-4 py-24">
             <motion.div 
               className="mx-auto max-w-3xl text-center"
               initial={{ opacity: 0, y: 20 }}
@@ -491,38 +671,73 @@ export default function Landing() {
               transition={{ duration: 0.6 }}
               viewport={{ once: true }}
             >
-              <h2 className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
-                Ready to Get Started?
+              <motion.div
+                initial={{ opacity: 0 }}
+                whileInView={{ opacity: 1 }}
+                transition={{ duration: 0.6 }}
+                className={`inline-block px-4 py-2 rounded-lg mb-6 text-xs font-bold tracking-wider uppercase ${
+                  isDark
+                    ? 'bg-blue-600/10 text-blue-300'
+                    : 'bg-blue-100 text-blue-700'
+                }`}
+              >
+                Get Started Today
+              </motion.div>
+              <h2 className={`text-4xl md:text-5xl font-black tracking-tight ${
+                isDark
+                  ? 'text-white'
+                  : 'text-slate-900'
+              }`}>
+                Take Control of Your Support Operations
               </h2>
-              <p className="mt-4 text-gray-300 text-lg">
-                Sign in with your account to access the ticket management system.
+              <p className={`mt-6 text-lg font-medium ${isDark ? 'text-gray-400' : 'text-slate-600'}`}>
+                Join teams across Physique 57 India managing support at scale with intelligent automation and real-time visibility.
               </p>
-              <div className="mt-8 flex flex-col items-center gap-6">
-                <Button 
-                  size="lg" 
-                  onClick={handleLogin} 
-                  data-testid="button-signin-bottom"
-                  className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-semibold px-8 shadow-lg shadow-purple-500/50 hover:shadow-purple-600/70 transition-all duration-300"
+              <div className="mt-12 flex flex-col items-center gap-8">
+                <motion.div
+                  whileHover={{ scale: 1.08, y: -2 }}
+                  whileTap={{ scale: 0.95 }}
                 >
-                  Sign In to Continue
-                  <ArrowRight className="ml-2 h-4 w-4" />
-                </Button>
+                  <Button 
+                    size="lg" 
+                    onClick={handleLogin} 
+                    data-testid="button-signin-bottom"
+                    className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-bold px-12 py-6 rounded-lg shadow-xl shadow-blue-600/40 hover:shadow-2xl hover:shadow-blue-600/60 transition-all duration-300 text-base"
+                  >
+                    Launch Support Platform
+                    <motion.span
+                      animate={{ x: [0, 6, 0] }}
+                      transition={{ duration: 1.5, repeat: Infinity }}
+                      className="ml-3 inline-block"
+                    >
+                      <ArrowRight className="h-5 w-5" />
+                    </motion.span>
+                  </Button>
+                </motion.div>
                 <motion.div 
-                  className="flex flex-wrap items-center justify-center gap-6 text-sm"
+                  className="flex flex-wrap items-center justify-center gap-5 text-sm"
                   initial={{ opacity: 0 }}
                   whileInView={{ opacity: 1 }}
-                  transition={{ delay: 0.3 }}
+                  transition={{ delay: 0.5 }}
                   viewport={{ once: true }}
                 >
                   {[
-                    { icon: <CheckCircle2 className="h-5 w-5 text-blue-400" />, label: 'Secure Authentication' },
-                    { icon: <CheckCircle2 className="h-5 w-5 text-purple-400" />, label: 'Role-based Access' },
-                    { icon: <CheckCircle2 className="h-5 w-5 text-cyan-400" />, label: 'Real-time Updates' }
+                    { icon: <Shield className={`h-5 w-5 ${isDark ? 'text-blue-400' : 'text-blue-600'}`} />, label: 'Enterprise Security' },
+                    { icon: <Users className={`h-5 w-5 ${isDark ? 'text-purple-400' : 'text-purple-600'}`} />, label: 'Team Collaboration' },
+                    { icon: <Zap className={`h-5 w-5 ${isDark ? 'text-cyan-400' : 'text-cyan-600'}`} />, label: 'Real-time Sync' }
                   ].map((item, idx) => (
-                    <div key={idx} className="flex items-center gap-2 px-4 py-2 rounded-lg bg-white/5 backdrop-blur-lg border border-white/10">
+                    <motion.div 
+                      key={idx} 
+                      whileHover={{ y: -2 }}
+                      className={`flex items-center gap-3 px-5 py-3 rounded-xl backdrop-blur-lg border font-semibold ${
+                        isDark
+                          ? 'bg-white/8 border-white/15 text-gray-300'
+                          : 'bg-white border-slate-200/80 text-slate-700 shadow-sm hover:shadow-md'
+                      }`}
+                    >
                       {item.icon}
-                      <span className="text-gray-300">{item.label}</span>
-                    </div>
+                      <span>{item.label}</span>
+                    </motion.div>
                   ))}
                 </motion.div>
               </div>
@@ -531,7 +746,11 @@ export default function Landing() {
         </section>
 
         {/* Footer */}
-        <footer className="border-t border-blue-500/20 bg-gradient-to-t from-background via-background to-transparent py-8">
+        <footer className={`border-t py-8 ${
+          isDark
+            ? 'border-blue-500/20 bg-gradient-to-t from-background via-background to-transparent'
+            : 'border-blue-200 bg-gradient-to-t from-white via-white to-transparent'
+        }`}>
           <div className="container mx-auto px-4">
             <motion.div 
               className="flex flex-col md:flex-row items-center justify-between gap-4"
@@ -542,11 +761,11 @@ export default function Landing() {
             >
               <div className="flex items-center gap-2">
                 <img src="/logo.png" alt="Physique 57 India" className="h-7 w-auto" />
-                <span className="text-sm text-muted-foreground">
+                <span className={`text-sm ${isDark ? 'text-muted-foreground' : 'text-gray-600'}`}>
                   Physique 57 India - Smart Ticket Management
                 </span>
               </div>
-              <p className="text-sm text-muted-foreground">
+              <p className={`text-sm ${isDark ? 'text-muted-foreground' : 'text-gray-600'}`}>
                 &copy; {new Date().getFullYear()} Physique 57. All rights reserved.
               </p>
             </motion.div>

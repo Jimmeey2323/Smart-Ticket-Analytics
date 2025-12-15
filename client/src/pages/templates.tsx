@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { LayoutTemplate } from "lucide-react";
+import { useTheme } from "@/components/theme-provider";
 
 import { apiRequest } from "@/lib/queryClient";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -104,16 +105,29 @@ export default function TemplatesPage() {
     );
   }
 
+  const { theme } = useTheme();
+  const isDark = theme === 'dark' || (theme === 'system' && typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex items-center gap-3">
-        <div className="h-10 w-10 rounded-lg bg-muted flex items-center justify-center">
-          <LayoutTemplate className="h-5 w-5 text-muted-foreground" />
+    <div className={`min-h-screen p-8 space-y-8 ${
+      isDark ? 'bg-gradient-to-br from-slate-900 via-blue-900/20 to-slate-900' : 'bg-gradient-to-br from-white via-blue-50 to-slate-50'
+    }`}>
+      <div className="flex items-center gap-6">
+        <div className={`h-16 w-16 rounded-xl flex items-center justify-center border-2 backdrop-blur-lg ${
+          isDark
+            ? 'bg-blue-600/20 border-blue-500/40 shadow-lg shadow-blue-500/20'
+            : 'bg-gradient-to-br from-blue-100/80 to-purple-100/80 border-blue-300/60 shadow-lg shadow-blue-300/30'
+        }`}>
+          <LayoutTemplate className={`h-8 w-8 ${
+            isDark ? 'text-blue-300' : 'text-blue-700'
+          }`} />
         </div>
         <div>
-          <h1 className="text-2xl font-semibold">Templates</h1>
-          <p className="text-sm text-muted-foreground">
-            Pick a template name, then create a ticket.
+          <h1 className="text-4xl md:text-5xl font-black tracking-tight mb-3 accent-gradient-text">Templates</h1>
+          <p className={`text-lg font-semibold ${
+            isDark ? 'text-gray-300' : 'text-slate-700'
+          }`}>
+            Pick a template and start creating a ticket instantly.
           </p>
         </div>
       </div>
@@ -163,25 +177,26 @@ export default function TemplatesPage() {
       {!isLoading && templateCategories.length > 0 && (
         <div className="grid gap-4 md:grid-cols-2">
           {templates.map(({ category, subcategory }) => (
-            <Card key={subcategory.id}>
+            <Card key={subcategory.id} className="relative overflow-hidden border transition-all duration-300 group hover:shadow-lg dark:bg-slate-800/40 dark:border-blue-500/30 dark:hover:border-blue-500/60 bg-white/80 dark:bg-slate-800/40 border-slate-200/80 dark:border-blue-500/30 hover:border-blue-300 dark:hover:border-blue-500/60">
+              <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-600 to-purple-600 dark:from-blue-500 dark:to-purple-500" />
               <CardHeader className="space-y-2">
                 <div className="flex items-start justify-between gap-3">
-                  <CardTitle className="text-base">{subcategory.name}</CardTitle>
-                  <Badge variant="secondary" className="shrink-0">
+                  <CardTitle className="text-base font-bold text-slate-900 dark:text-white">{subcategory.name}</CardTitle>
+                  <Badge variant="secondary" className="shrink-0 bg-blue-100 dark:bg-blue-600/20 text-blue-700 dark:text-blue-300 border-0">
                     {category.name}
                   </Badge>
                 </div>
               </CardHeader>
               <CardContent className="space-y-3">
                 {subcategory.description ? (
-                  <p className="text-sm text-muted-foreground">
+                  <p className="text-sm text-slate-600 dark:text-gray-400">
                     {subcategory.description}
                   </p>
                 ) : (
-                  <p className="text-sm text-muted-foreground">Template</p>
+                  <p className="text-sm text-slate-600 dark:text-gray-400">Template</p>
                 )}
 
-                <Button asChild className="w-full">
+                <Button asChild className="w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-bold shadow-lg hover:shadow-xl">
                   <Link
                     href={`/tickets/new?categoryId=${encodeURIComponent(category.id)}&subcategoryId=${encodeURIComponent(subcategory.id)}`}
                   >
